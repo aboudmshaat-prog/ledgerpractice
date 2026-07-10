@@ -1,0 +1,15 @@
+[Unit]
+Description=LedgerPractice (single-user accounting tool)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ledgerpractice
+ExecStart=/usr/bin/node server.js
+EnvironmentFile=/etc/ledgerpractice.env
+Restart=always
+RestartSec=3
+# Data is written under /opt/ledgerpractice/data and is NOT touched by deploys.
+
+[Install]
+WantedBy=multi-user.target

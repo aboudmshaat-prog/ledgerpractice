@@ -1,0 +1,7 @@
+# Installed ONCE on the server at /etc/caddy/Caddyfile. Change the domain.
+# Caddy gives you automatic HTTPS and forwards traffic to the app on port 3000.
+
+app.yourdomain.co.uk {
+    encode gzip
+    reverse_proxy 127.0.0.1:3000
+}

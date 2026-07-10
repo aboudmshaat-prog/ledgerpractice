@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LedgerPractice — Working App</title>
+<style>
+:root{--navy:#1F3A5F;--blue:#2E75B6;--bg:#eef2f7;--card:#fff;--line:#e2e8f0;--grey:#5b6a82;--muted:#8a97ab;
+--green:#2ea36b;--red:#e0554e;--amber:#e0993a;--shadow:0 1px 3px rgba(20,40,80,.06),0 6px 22px rgba(20,40,80,.06);}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:#1a2233;-webkit-font-smoothing:antialiased}
+.app{display:flex;min-height:100vh}
+/* sidebar */
+.side{width:216px;background:var(--navy);color:#cdd9ea;flex-shrink:0;padding:20px 0;position:sticky;top:0;height:100vh}
+.side .logo{padding:0 20px 18px;font-weight:800;color:#fff;font-size:17px;letter-spacing:-.2px}
+.side .logo small{display:block;font-weight:500;color:#8fa6c4;font-size:11px;margin-top:2px}
+.nav a{display:flex;align-items:center;gap:10px;padding:11px 20px;color:#c2d0e6;text-decoration:none;font-size:14px;font-weight:600;cursor:pointer;border-left:3px solid transparent}
+.nav a:hover{background:rgba(255,255,255,.05)}
+.nav a.active{background:rgba(255,255,255,.09);color:#fff;border-left-color:#4d90d0}
+.nav .ico{width:16px;text-align:center}
+.side .foot{position:absolute;bottom:16px;left:20px;right:20px;font-size:11px;color:#7f97b8}
+/* main */
+.main{flex:1;padding:26px 30px 60px;max-width:1080px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px;flex-wrap:wrap}
+.topbar h1{font-size:20px;color:var(--navy);font-weight:800}
+.topbar .sub{font-size:13px;color:var(--grey);margin-top:2px}
+.clientpick{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--grey)}
+select,input,textarea{font-family:inherit;font-size:14px;border:1px solid var(--line);border-radius:8px;padding:9px 11px;background:#fff;color:#1a2233}
+select:focus,input:focus,textarea:focus{outline:none;border-color:var(--blue)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:20px;margin-bottom:18px}
+.card h2{font-size:15px;color:var(--navy);margin-bottom:4px}
+.card .desc{font-size:13px;color:var(--grey);margin-bottom:14px}
+.btn{border:0;background:var(--blue);color:#fff;border-radius:9px;padding:10px 16px;font-size:13.5px;font-weight:700;cursor:pointer}
+.btn:hover{background:#255f97}
+.btn.sec{background:#eef3f9;color:var(--blue)}
+.btn.sec:hover{background:#e0ebf6}
+.btn.ghost{background:transparent;color:var(--grey);border:1px solid var(--line)}
+.btn.sm{padding:6px 11px;font-size:12px}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:12px;font-weight:700;color:var(--grey)}
+.field.grow{flex:1;min-width:160px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;padding:8px 10px;border-bottom:2px solid var(--line)}
+td{padding:9px 10px;border-bottom:1px solid #f0f3f7}
+tr:hover td{background:#fafcfe}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.pill{display:inline-block;font-size:11px;font-weight:800;padding:3px 9px;border-radius:20px}
+.pill.green{background:#e4f6ee;color:var(--green)} .pill.red{background:#fdeceb;color:var(--red)} .pill.amber{background:#fbf1e4;color:var(--amber)} .pill.bs{background:#eaf1fb;color:var(--blue)} .pill.pl{background:#eef6f0;color:var(--green)}
+.confbar{height:6px;width:60px;background:#eef1f6;border-radius:9px;overflow:hidden;display:inline-block;vertical-align:middle}
+.confbar span{display:block;height:100%;border-radius:9px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow)}
+.kpi .l{font-size:12px;color:var(--grey);font-weight:600}
+.kpi .v{font-size:23px;color:var(--navy);font-weight:800;margin-top:6px}
+.banner{border-radius:10px;padding:12px 15px;font-size:13.5px;font-weight:600;margin-bottom:14px}
+.banner.ok{background:#e4f6ee;color:#1f7d51;border:1px solid #b7e6cd}
+.banner.err{background:#fdeceb;color:#b23a32;border:1px solid #f3c3bf}
+.banner.info{background:#eaf1fb;color:#2a5f96;border:1px solid #c3dbf3}
+.empty{text-align:center;color:var(--muted);padding:34px;font-size:14px}
+.hide{display:none}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.tag{font-size:11px;color:var(--muted)}
+.mini{font-size:12px;color:var(--grey)}
+h3.sec{font-size:13px;color:var(--navy);margin:6px 0 8px;text-transform:uppercase;letter-spacing:.5px}
+.totrow td{font-weight:800;border-top:2px solid var(--line);background:#f7fafd}
+@media(max-width:820px){.side{width:64px}.side .logo small,.nav a span.lbl,.side .foot{display:none}.nav a{justify-content:center}.kpis{grid-template-columns:repeat(2,1fr)}.split{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="loginOverlay" style="display:none;position:fixed;inset:0;background:#1F3A5F;z-index:100;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+ <div style="background:#fff;border-radius:16px;padding:34px 30px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.35);text-align:center;">
+  <div style="font-weight:800;font-size:20px;color:#1F3A5F;">LedgerPractice</div>
+  <div style="font-size:13px;color:#5b6a82;margin:6px 0 18px;">Enter your password to continue</div>
+  <input id="loginPw" type="password" placeholder="Password" autocomplete="current-password" style="width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:9px;font-size:15px;margin-bottom:10px;box-sizing:border-box;">
+  <button id="loginBtn" style="width:100%;padding:11px;background:#2E75B6;color:#fff;border:0;border-radius:9px;font-weight:700;font-size:14px;cursor:pointer;">Unlock</button>
+  <div id="loginMsg" style="font-size:12px;color:#e0554e;margin-top:10px;min-height:16px;"></div>
+ </div>
+</div>
+<div id="statusBar" style="position:fixed;top:10px;right:16px;z-index:50;display:flex;align-items:center;gap:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+ <span id="saveState" style="font-size:12px;color:#8a97ab;"></span>
+ <button id="logoutBtn" style="font-size:12px;color:#5b6a82;background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:5px 10px;cursor:pointer;">Log out</button>
+</div>
+<div class="app">
+  <aside class="side">
+    <div class="logo">LedgerPractice<small>working demo</small></div>
+    <nav class="nav" id="nav">
+      <a data-v="clients" class="active"><span class="ico">🏢</span><span class="lbl">Clients</span></a>
+      <a data-v="opening"><span class="ico">⚖️</span><span class="lbl">Opening balances</span></a>
+      <a data-v="upload"><span class="ico">📥</span><span class="lbl">Upload statement</span></a>
+      <a data-v="review"><span class="ico">✅</span><span class="lbl">Review queue</span></a>
+      <a data-v="reports"><span class="ico">📊</span><span class="lbl">Reports</span></a>
+    </nav>
+    <div class="foot">Runs entirely on your computer.<br>Nothing is sent anywhere.<br>Use test data only.</div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div><h1 id="vtitle">Clients</h1><div class="sub" id="vsub">Add the businesses whose books you keep.</div></div>
+      <div class="clientpick">Active client:
+        <select id="clientPick"></select>
+      </div>
+    </div>
+    <div id="view"></div>
+  </main>
+</div>
+
+<script>
+/* ============ ENGINE (proven in testing) ============ */
+function toPence(v){const s=String(v).replace(/[£,\s]/g,"");if(s===""||isNaN(Number(s)))return 0;return Math.round(parseFloat(s)*100);}
+function money(p){const n=p<0;p=Math.abs(p);const s=(p/100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,",");return (n?"-£":"£")+s;}
+const ACCOUNTS={
+ "4000":{name:"Sales",type:"income",stmt:"PL",vatable:true},
+ "4900":{name:"Other Income",type:"income",stmt:"PL",vatable:true},
+ "7500":{name:"Software & IT",type:"expense",stmt:"PL",vatable:true},
+ "7600":{name:"Bank & Finance Charges",type:"expense",stmt:"PL",vatable:false},
+ "7100":{name:"Rent & Premises",type:"expense",stmt:"PL",vatable:true},
+ "7200":{name:"Travel & Subsistence",type:"expense",stmt:"PL",vatable:true},
+ "7000":{name:"General Expenses",type:"expense",stmt:"PL",vatable:true},
+ "0050":{name:"Fixed Assets",type:"asset",stmt:"BS"},
+ "1200":{name:"Bank Current Account",type:"asset",stmt:"BS"},
+ "2050":{name:"Director's Loan Account",type:"liability",stmt:"BS"},
+ "2100":{name:"Liabilities (Loans/Tax)",type:"liability",stmt:"BS"},
+ "2200":{name:"VAT Control",type:"liability",stmt:"BS"},
+ "3000":{name:"Capital & Reserves",type:"equity",stmt:"BS"},
+};
+const PL_CODES=Object.keys(ACCOUNTS).filter(c=>ACCOUNTS[c].stmt==="PL");
+const BS_CODES=Object.keys(ACCOUNTS).filter(c=>ACCOUNTS[c].stmt==="BS");
+
+function parseCSV(text){
+ const rows=text.trim().split(/\r?\n/).map(r=>r.split(","));
+ if(rows.length<2) return [];
+ const head=rows.shift().map(h=>h.trim().toLowerCase());
+ const di=head.findIndex(h=>h.includes("date"));
+ const de=head.findIndex(h=>h.includes("desc")||h.includes("narr")||h.includes("detail")||h.includes("reference"));
+ const ai=head.findIndex(h=>h.includes("amount")||h.includes("value"));
+ const bi=head.findIndex(h=>h.includes("balance"));
+ return rows.filter(r=>r.length>1&&r.join("").trim()!=="").map((r,i)=>({
+   date:(r[di]||"").trim(),description:(r[de]||"").trim(),
+   amountPence:toPence(r[ai]),runningBalancePence:bi>=0?toPence(r[bi]):null,line:i+1,
+ }));
+}
+function checkFilename(n){return /^\d{4}-\d{2}_[A-Za-z0-9\-]+_[A-Za-z0-9\-]+\.(pdf|csv)$/i.test(n);}
+function verifyBalance(op,cl,txns){const mv=txns.reduce((a,t)=>a+t.amountPence,0);const c=op+mv;return{computed:c,variance:c-cl,ok:(c-cl)===0};}
+function categorise(t,cap,dirRefs){
+ const d=t.description.toUpperCase(),out=t.amountPence<0;
+ for(const ref of dirRefs){if(ref&&d.includes(ref.toUpperCase()))return{code:"2050",conf:.99,why:"Director reference → Director's Loan Account"};}
+ if(out&&/(HMRC|VAT|PAYE|NIC|LOAN REPAY)/.test(d))return{code:"2100",conf:.9,why:"Liability settlement (tax/loan)"};
+ if(t.amountPence>0)return{code:"4000",conf:.85,why:"Money in → Sales"};
+ const asset=/(LAPTOP|COMPUTER|MACBOOK|EQUIPMENT|FURNITURE|VEHICLE|MACHINE|SERVER|IMAC)/.test(d);
+ if(out&&asset&&Math.abs(t.amountPence)>=cap)return{code:"0050",conf:.92,why:"Asset over £"+(cap/100).toLocaleString()+" → capitalised (Balance Sheet)"};
+ if(/(AWS|GOOGLE|MICROSOFT|AZURE|XERO|ADOBE|SOFTWARE|SAAS|GITHUB|SLACK|ZOOM)/.test(d))return{code:"7500",conf:.8,why:"Software/IT keyword"};
+ if(/(BANK CHARGE|INTEREST|FEE|STRIPE FEE)/.test(d))return{code:"7600",conf:.8,why:"Bank/finance charge"};
+ if(/(RENT|OFFICE|PREMISES|WEWORK)/.test(d))return{code:"7100",conf:.75,why:"Rent/premises keyword"};
+ if(/(TRAIN|UBER|HOTEL|FLIGHT|TRAVEL|RAIL)/.test(d))return{code:"7200",conf:.75,why:"Travel keyword"};
+ return{code:"7000",conf:.5,why:"Unclassified → General Expenses (please review)"};
+}
+function buildJournal(t,code,client){
+ // Bank line sign: +in / -out. Ledger sign: +debit / -credit. Journal nets to zero.
+ const a=t.amountPence, acct=ACCOUNTS[code];
+ const useVat = !!(client && client.vatReg && acct && acct.stmt==="PL" && acct.vatable);
+ if(!useVat) return [{code:"1200",amountPence:a},{code,amountPence:-a}];
+ // Gross is VAT-inclusive: split into net + VAT at the client's rate.
+ const rate=(client.vatRate||20)/100;
+ const net=Math.round(a/(1+rate));
+ const vat=a-net;
+ return [{code:"1200",amountPence:a},{code,amountPence:-net},{code:"2200",amountPence:-vat}];
+}
+
+/* ============ STATE ============ */
+let db={clients:[],active:null,opening:{},statements:{}};
+let _saveTimer=null;
+function setSaveState(s){const e=document.getElementById("saveState");if(!e)return;
+ e.textContent=s==="saving"?"Saving…":s==="saved"?"All changes saved":s==="error"?"Save failed — check connection":"";
+ e.style.color=s==="error"?"#e0554e":"#8a97ab";}
+function save(){
+ clearTimeout(_saveTimer);setSaveState("saving");
+ _saveTimer=setTimeout(async()=>{
+  try{const r=await fetch("/api/data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(db)});
+   setSaveState(r.ok?"saved":"error");}catch(e){setSaveState("error");}
+ },400);
+}
+function activeClient(){return db.clients.find(c=>c.id===db.active)||null;}
+function uid(){return Math.random().toString(36).slice(2,9);}
+
+/* ============ VIEWS ============ */
+let view="clients";
+const TITLES={clients:["Clients","Add the businesses whose books you keep."],
+ opening:["Opening balances","Set the client's starting position. Debits must equal credits."],
+ upload:["Upload statement","Import a bank statement, with safety checks before anything posts."],
+ review:["Review queue","Check and correct how each transaction was categorised."],
+ reports:["Reports","Live Profit & Loss, Balance Sheet and key figures."]};
+
+function setView(v){view=v;
+ document.querySelectorAll("#nav a").forEach(a=>a.classList.toggle("active",a.dataset.v===v));
+ document.getElementById("vtitle").textContent=TITLES[v][0];
+ document.getElementById("vsub").textContent=TITLES[v][1];
+ render();}
+
+function clientPick(){
+ const sel=document.getElementById("clientPick");
+ if(!db.clients.length){sel.innerHTML='<option>— none yet —</option>';return;}
+ sel.innerHTML=db.clients.map(c=>`<option value="${c.id}" ${c.id===db.active?"selected":""}>${c.name}</option>`).join("");
+}
+
+function render(){
+ clientPick();
+ const el=document.getElementById("view");
+ if(view==="clients")return el.innerHTML=viewClients();
+ const c=activeClient();
+ if(!c){el.innerHTML=`<div class="card"><div class="empty">Add a client first, then choose them as the active client at the top right.</div></div>`;return;}
+ if(view==="opening")el.innerHTML=viewOpening(c);
+ if(view==="upload")el.innerHTML=viewUpload(c);
+ if(view==="review")el.innerHTML=viewReview(c);
+ if(view==="reports")el.innerHTML=viewReports(c);
+ bindView();
+}
+
+/* ---- Clients ---- */
+function viewClients(){
+ const list=db.clients.length?`<table><thead><tr><th>Business</th><th>Company no.</th><th>VAT</th><th>Capitalisation</th><th>Director refs</th><th></th></tr></thead><tbody>
+  ${db.clients.map(c=>`<tr><td><b>${c.name}</b></td><td>${c.companyNo||"—"}</td><td>${c.vatReg?'<span class="pill bs">VAT '+(c.vatRate||20)+'%</span>':'<span class="pill" style="background:#eef1f5;color:#7a879c">Not registered</span>'}</td><td>${money(c.capPence)}</td><td class="mini">${(c.dirRefs||[]).join(", ")||"—"}</td>
+   <td class="num"><button class="btn sm ghost" data-use="${c.id}">Set active</button> <button class="btn sm ghost" data-del="${c.id}">Delete</button></td></tr>`).join("")}
+  </tbody></table>`:`<div class="empty">No clients yet — add your first below.</div>`;
+ return `<div class="card"><h2>Your clients</h2><div class="desc">Each client is kept in its own separate silo.</div>${list}</div>
+ <div class="card"><h2>Add a client</h2>
+  <div class="row">
+   <div class="field grow"><label>Business name</label><input id="cName" placeholder="Acme Ltd"></div>
+   <div class="field"><label>Company number (optional)</label><input id="cNo" placeholder="12345678"></div>
+   <div class="field"><label>Capitalise assets over (£)</label><input id="cCap" value="1000"></div>
+  </div>
+  <div class="row" style="margin-top:12px">
+   <div class="field"><label>VAT</label><label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;padding:9px 0;white-space:nowrap"><input type="checkbox" id="cVat" style="width:17px;height:17px"> Registered for VAT</label></div>
+   <div class="field"><label>VAT rate (%)</label><input id="cVatRate" value="20" style="width:90px"></div>
+   <div class="field grow"><label>Director references (comma separated) — routes personal spend to the Director's Loan Account</label><input id="cDir" placeholder="DIR-LOAN, J SMITH"></div>
+  </div>
+  <div class="row" style="margin-top:12px"><button class="btn" id="addClient">Add client</button>
+   <div class="mini" style="align-self:center">If VAT is unticked, VAT is ignored entirely. If ticked, income &amp; standard-rated expenses are split into net + VAT.</div>
+  </div></div>`;
+}
+
+/* ---- Opening balances ---- */
+function viewOpening(c){
+ const rows=(db.opening[c.id]||[]);
+ const body=rows.map((r,i)=>`<tr>
+  <td><select data-oc="${i}">${Object.keys(ACCOUNTS).map(code=>`<option value="${code}" ${code===r.code?"selected":""}>${code} · ${ACCOUNTS[code].name}</option>`).join("")}</select></td>
+  <td class="num"><input class="num" style="width:120px" data-od="${i}" value="${r.debit||""}" placeholder="0.00"></td>
+  <td class="num"><input class="num" style="width:120px" data-ocr="${i}" value="${r.credit||""}" placeholder="0.00"></td>
+  <td class="num"><button class="btn sm ghost" data-orm="${i}">✕</button></td></tr>`).join("");
+ const dt=rows.reduce((a,r)=>a+toPence(r.debit),0), ct=rows.reduce((a,r)=>a+toPence(r.credit),0);
+ const bal=dt===ct;
+ return `<div class="card"><h2>Opening balances — ${c.name}</h2>
+  <div class="desc">Enter the starting figures (in pounds). The trial balance must net to zero before you can lock it.</div>
+  <table><thead><tr><th>Account</th><th class="num">Debit (£)</th><th class="num">Credit (£)</th><th></th></tr></thead>
+   <tbody id="obBody">${body||`<tr><td colspan=4 class="mini">No rows yet — add one below.</td></tr>`}</tbody>
+   <tfoot><tr class="totrow"><td>Totals</td><td class="num">${money(dt)}</td><td class="num">${money(ct)}</td><td></td></tr></tfoot></table>
+  <div class="row" style="margin-top:14px">
+   <button class="btn sec" id="obAdd">+ Add row</button>
+   <div class="banner ${bal?"ok":"err"}" style="margin:0;flex:1">${bal?"✓ Balanced — debits equal credits":"Not balanced — difference of "+money(Math.abs(dt-ct))}</div>
+  </div></div>`;
+}
+
+/* ---- Upload ---- */
+const SAMPLE=`Date,Description,Amount,Balance
+2026-06-02,STRIPE PAYOUT INV1042,4200.00,5200.00
+2026-06-05,AWS EMEA CLOUD,-318.44,4881.56
+2026-06-09,BARCLAYS BANK CHARGE,-22.00,4859.56
+2026-06-14,DELL MACBOOK LAPTOP FLEET,-1450.00,3409.56
+2026-06-18,WEWORK OFFICE RENT,-650.00,2759.56
+2026-06-20,HMRC VAT PAYMENT,-980.00,1779.56
+2026-06-25,DIR-LOAN J SMITH PERSONAL,-300.00,1479.56
+2026-06-28,TRAINLINE TRAVEL,-49.44,1430.12`;
+function viewUpload(c){
+ return `<div class="card"><h2>Import a bank statement</h2>
+  <div class="desc">Paste a CSV (or click “Load sample”). We check the filename and that the statement adds up <b>before</b> posting anything.</div>
+  <div class="row">
+   <div class="field"><label>File name (YYYY-MM_Company_Bank.csv)</label><input id="uName" value="2026-06_Acme_Barclays.csv" style="width:280px"></div>
+   <div class="field"><label>Opening balance (£)</label><input id="uOpen" value="1000.00" style="width:130px"></div>
+   <div class="field"><label>Closing balance (£)</label><input id="uClose" value="1430.12" style="width:130px"></div>
+  </div>
+  <div class="field" style="margin-top:12px"><label>Statement rows (CSV)</label>
+   <textarea id="uCsv" rows="9" style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px">${SAMPLE}</textarea></div>
+  <div class="row" style="margin-top:12px">
+   <button class="btn" id="uImport">Check &amp; import</button>
+   <button class="btn sec" id="uSample">Load sample</button>
+  </div>
+  <div id="uResult" style="margin-top:14px"></div>
+ </div>
+ ${statementsList(c)}`;
+}
+function statementsList(c){
+ const s=(db.statements[c.id]||[]);
+ if(!s.length)return "";
+ return `<div class="card"><h2>Imported statements</h2>
+  <table><thead><tr><th>File</th><th>Period</th><th class="num">Opening</th><th class="num">Closing</th><th>Status</th><th class="num">Lines</th><th></th></tr></thead><tbody>
+  ${s.map(st=>`<tr><td class="mini">${st.filename}</td><td>${st.ym}</td><td class="num">${money(st.openingPence)}</td><td class="num">${money(st.closingPence)}</td>
+   <td>${st.reconciled?'<span class="pill green">Reconciled</span>':'<span class="pill red">Not reconciled</span>'}</td>
+   <td class="num">${st.txns.length}</td>
+   <td class="num"><button class="btn sm ghost" data-delst="${st.id}">Delete</button></td></tr>`).join("")}
+  </tbody></table></div>`;
+}
+
+/* ---- Review ---- */
+function allTxns(c){const out=[];(db.statements[c.id]||[]).forEach(st=>st.txns.forEach(t=>out.push({st:st.id,t})));return out;}
+function viewReview(c){
+ const rows=allTxns(c);
+ if(!rows.length)return `<div class="card"><div class="empty">No transactions yet. Import a statement first.</div></div>`;
+ rows.sort((a,b)=>a.t.conf-b.t.conf);
+ const body=rows.map(({st,t})=>{
+  const conf=Math.round(t.conf*100);const col=conf>=80?"#2ea36b":conf>=60?"#e0993a":"#e0554e";
+  const a=ACCOUNTS[t.code];
+  return `<tr>
+   <td class="mini">${t.date}</td>
+   <td>${t.description}</td>
+   <td class="num" style="color:${t.amountPence<0?'#b23a32':'#1f7d51'}">${money(t.amountPence)}</td>
+   <td><select data-cat="${st}:${t.line}">${Object.keys(ACCOUNTS).map(code=>`<option value="${code}" ${code===t.code?"selected":""}>${ACCOUNTS[code].name}</option>`).join("")}</select></td>
+   <td><span class="pill ${a.stmt==='BS'?'bs':'pl'}">${a.stmt}</span></td>
+   <td><span class="confbar"><span style="width:${conf}%;background:${col}"></span></span> <span class="mini">${conf}%</span></td>
+   <td>${t.confirmed?'<span class="pill green">Confirmed</span>':`<button class="btn sm sec" data-confirm="${st}:${t.line}">Confirm</button>`}</td>
+  </tr>`;
+ }).join("");
+ const low=rows.filter(r=>r.t.conf<0.6).length;
+ return `<div class="card"><h2>Review queue — ${c.name}</h2>
+  <div class="desc">Lowest-confidence items are at the top. Change any category from the dropdown; the books rebalance automatically.</div>
+  ${low?`<div class="banner info">${low} transaction(s) are low-confidence and worth checking.</div>`:`<div class="banner ok">Nothing low-confidence — looking clean.</div>`}
+  <table><thead><tr><th>Date</th><th>Description</th><th class="num">Amount</th><th>Account</th><th>Goes to</th><th>Confidence</th><th></th></tr></thead>
+   <tbody>${body}</tbody></table>
+  <div class="row" style="margin-top:12px"><button class="btn sec" id="confirmAll">Confirm all</button></div>
+ </div>`;
+}
+
+/* ---- Reports ---- */
+function ledger(c){
+ const entries=[];
+ (db.opening[c.id]||[]).forEach(r=>{const v=toPence(r.debit)-toPence(r.credit);if(v!==0)entries.push({code:r.code,amountPence:v});});
+ (db.statements[c.id]||[]).forEach(st=>{if(!st.reconciled)return;st.txns.forEach(t=>{buildJournal(t,t.code,c).forEach(e=>entries.push(e));});});
+ const bal={};entries.forEach(e=>bal[e.code]=(bal[e.code]||0)+e.amountPence);
+ return bal;
+}
+function viewReports(c){
+ const bal=ledger(c);
+ let income=0,expense=0,assets=0,liab=0,equity=0;
+ const plLines=[],bsAssets=[],bsLiab=[];
+ for(const code in bal){const a=ACCOUNTS[code];if(!a)continue;const v=bal[code];
+  if(a.stmt==="PL"){if(a.type==="income"){income+=-v;plLines.push([a.name,-v,"income"]);}else{expense+=v;plLines.push([a.name,v,"expense"]);}}
+  else{if(a.type==="asset"){assets+=v;bsAssets.push([a.name,v]);}
+   else if(a.type==="equity"){equity+=-v;}else{liab+=-v;bsLiab.push([a.name,-v]);}}
+ }
+ const net=income-expense;
+ const grossMargin=income?Math.round(net/income*1000)/10:0;
+ const currentRatio=liab!==0?Math.round(Math.abs(assets/liab)*100)/100:"—";
+ const taxReserve=net>0?Math.round(net*0.19):0; // illustrative 19%
+ const plBody=plLines.length?`
+   <tr><td colspan=2><h3 class="sec" style="margin:2px 0">Income</h3></td></tr>
+   ${plLines.filter(l=>l[2]==="income").map(l=>`<tr><td>${l[0]}</td><td class="num">${money(l[1])}</td></tr>`).join("")||'<tr><td class="mini">None</td><td></td></tr>'}
+   <tr><td colspan=2><h3 class="sec" style="margin:8px 0 2px">Expenses</h3></td></tr>
+   ${plLines.filter(l=>l[2]==="expense").map(l=>`<tr><td>${l[0]}</td><td class="num">${money(l[1])}</td></tr>`).join("")||'<tr><td class="mini">None</td><td></td></tr>'}
+   <tr class="totrow"><td>Net profit</td><td class="num">${money(net)}</td></tr>`:`<tr><td class="mini">No posted transactions yet.</td><td></td></tr>`;
+ return `<div class="kpis">
+   <div class="kpi"><div class="l">Net profit</div><div class="v">${money(net)}</div></div>
+   <div class="kpi"><div class="l">Net margin</div><div class="v">${grossMargin}%</div></div>
+   <div class="kpi"><div class="l">Current ratio (liquidity)</div><div class="v">${currentRatio}</div></div>
+   <div class="kpi"><div class="l">Tax reserve (est. 19%)</div><div class="v">${money(taxReserve)}</div></div>
+  </div>
+  <div class="split">
+   <div class="card"><h2>Profit &amp; Loss</h2><div class="desc">From reconciled transactions only.</div>
+    <table><tbody>${plBody}</tbody></table></div>
+   <div class="card"><h2>Balance Sheet</h2><div class="desc">Assets, liabilities and equity.</div>
+    <table><tbody>
+     <tr><td colspan=2><h3 class="sec" style="margin:2px 0">Assets</h3></td></tr>
+     ${bsAssets.map(l=>`<tr><td>${l[0]}</td><td class="num">${money(l[1])}</td></tr>`).join("")||'<tr><td class="mini">None</td><td></td></tr>'}
+     <tr class="totrow"><td>Total assets</td><td class="num">${money(assets)}</td></tr>
+     <tr><td colspan=2><h3 class="sec" style="margin:8px 0 2px">Liabilities</h3></td></tr>
+     ${bsLiab.map(l=>`<tr><td>${l[0]}</td><td class="num">${money(l[1])}</td></tr>`).join("")||'<tr><td class="mini">None</td><td></td></tr>'}
+     <tr class="totrow"><td>Total liabilities</td><td class="num">${money(liab)}</td></tr>
+    </tbody></table></div>
+  </div>
+  <div class="card"><div class="mini">Note: this is a working demonstration on test data. Figures depend on the opening balances and categories you set. Have an accountant review before relying on any output.</div></div>`;
+}
+
+/* ============ BINDINGS ============ */
+function bindView(){
+ // clients
+ const add=document.getElementById("addClient");
+ if(add)add.onclick=()=>{const n=val("cName");if(!n)return alert("Enter a business name.");
+  const vatEl=document.getElementById("cVat");
+  const c={id:uid(),name:n,companyNo:val("cNo"),capPence:toPence(val("cCap")||"1000"),
+   vatReg:vatEl?vatEl.checked:false,vatRate:parseFloat(val("cVatRate")||"20")||20,
+   dirRefs:val("cDir").split(",").map(s=>s.trim()).filter(Boolean)};
+  db.clients.push(c);db.active=c.id;save();render();};
+ document.querySelectorAll("[data-use]").forEach(b=>b.onclick=()=>{db.active=b.dataset.use;save();render();});
+ document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{if(confirm("Delete this client and its data?")){db.clients=db.clients.filter(c=>c.id!==b.dataset.del);delete db.opening[b.dataset.del];delete db.statements[b.dataset.del];if(db.active===b.dataset.del)db.active=db.clients[0]?.id||null;save();render();}});
+
+ // opening balances
+ const c=activeClient();
+ const obAdd=document.getElementById("obAdd");
+ if(obAdd)obAdd.onclick=()=>{db.opening[c.id]=db.opening[c.id]||[];db.opening[c.id].push({code:"1200",debit:"",credit:""});save();render();};
+ document.querySelectorAll("[data-oc]").forEach(s=>s.onchange=()=>{db.opening[c.id][s.dataset.oc].code=s.value;save();render();});
+ document.querySelectorAll("[data-od]").forEach(i=>i.onchange=()=>{db.opening[c.id][i.dataset.od].debit=i.value;save();render();});
+ document.querySelectorAll("[data-ocr]").forEach(i=>i.onchange=()=>{db.opening[c.id][i.dataset.ocr].credit=i.value;save();render();});
+ document.querySelectorAll("[data-orm]").forEach(b=>b.onclick=()=>{db.opening[c.id].splice(b.dataset.orm,1);save();render();});
+
+ // upload
+ const imp=document.getElementById("uImport");
+ if(imp)imp.onclick=()=>doImport(c);
+ const smp=document.getElementById("uSample");
+ if(smp)smp.onclick=()=>{document.getElementById("uCsv").value=SAMPLE;document.getElementById("uName").value="2026-06_Acme_Barclays.csv";document.getElementById("uOpen").value="1000.00";document.getElementById("uClose").value="1430.12";};
+ document.querySelectorAll("[data-delst]").forEach(b=>b.onclick=()=>{db.statements[c.id]=db.statements[c.id].filter(s=>s.id!==b.dataset.delst);save();render();});
+
+ // review
+ document.querySelectorAll("[data-cat]").forEach(s=>s.onchange=()=>{setCat(c,s.dataset.cat,s.value);});
+ document.querySelectorAll("[data-confirm]").forEach(b=>b.onclick=()=>{setConfirm(c,b.dataset.confirm,true);});
+ const ca=document.getElementById("confirmAll");
+ if(ca)ca.onclick=()=>{(db.statements[c.id]||[]).forEach(st=>st.txns.forEach(t=>t.confirmed=true));save();render();};
+}
+function val(id){const e=document.getElementById(id);return e?e.value.trim():"";}
+function doImport(c){
+ const name=val("uName"),op=toPence(val("uOpen")),cl=toPence(val("uClose"));
+ const res=document.getElementById("uResult");
+ if(!checkFilename(name)){res.innerHTML=`<div class="banner err">✗ File name doesn’t match <b>YYYY-MM_Company_Bank.csv</b>. Example: 2026-06_Acme_Barclays.csv</div>`;return;}
+ const txns=parseCSV(val("uCsv"));
+ if(!txns.length){res.innerHTML=`<div class="banner err">✗ Couldn’t read any rows. Check the CSV has a header row with Date, Description, Amount.</div>`;return;}
+ const rec=verifyBalance(op,cl,txns);
+ if(!rec.ok){res.innerHTML=`<div class="banner err">✗ Statement doesn’t reconcile. Opening ${money(op)} + movements = ${money(rec.computed)}, but closing says ${money(cl)} (off by ${money(Math.abs(rec.variance))}). Nothing was posted.</div>`;return;}
+ const m=name.match(/^(\d{4})-(\d{2})/);const ym=m?m[1]+"-"+m[2]:"";
+ txns.forEach(t=>{const cat=categorise(t,c.capPence,c.dirRefs||[]);t.code=cat.code;t.conf=cat.conf;t.why=cat.why;t.confirmed=false;});
+ db.statements[c.id]=db.statements[c.id]||[];
+ // replace same file if re-imported
+ db.statements[c.id]=db.statements[c.id].filter(s=>s.filename!==name);
+ db.statements[c.id].push({id:uid(),filename:name,ym,openingPence:op,closingPence:cl,reconciled:true,txns});
+ save();
+ res.innerHTML=`<div class="banner ok">✓ Reconciled to zero and imported ${txns.length} transactions. Open the <b>Review queue</b> to check categories, then see the <b>Reports</b>.</div>`;
+ setTimeout(render,900);
+}
+function findTxn(c,key){const [st,line]=key.split(":");const s=(db.statements[c.id]||[]).find(x=>x.id===st);return s?s.txns.find(t=>String(t.line)===line):null;}
+function setCat(c,key,code){const t=findTxn(c,key);if(t){t.code=code;t.conf=1;t.confirmed=true;}save();render();}
+function setConfirm(c,key,v){const t=findTxn(c,key);if(t)t.confirmed=v;save();render();}
+
+/* ============ INIT / AUTH / SERVER SYNC ============ */
+document.getElementById("nav").addEventListener("click",e=>{const a=e.target.closest("a");if(a)setView(a.dataset.v);});
+document.getElementById("clientPick").addEventListener("change",e=>{db.active=e.target.value;save();render();});
+function showLogin(){document.getElementById("loginOverlay").style.display="flex";document.getElementById("loginPw").focus();}
+function hideLogin(){document.getElementById("loginOverlay").style.display="none";}
+async function loadFromServer(){
+ try{const r=await fetch("/api/data");
+  if(r.status===401){showLogin();return;}
+  const d=await r.json();if(d&&d.clients)db=d;
+  hideLogin();render();setSaveState("saved");
+ }catch(e){document.getElementById("loginMsg").textContent="Cannot reach the server.";showLogin();}
+}
+async function doLogin(){
+ const pw=document.getElementById("loginPw").value;const msg=document.getElementById("loginMsg");
+ msg.textContent="Checking…";
+ try{const r=await fetch("/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:pw})});
+  if(r.ok){msg.textContent="";document.getElementById("loginPw").value="";await loadFromServer();}
+  else{msg.textContent="Incorrect password.";}
+ }catch(e){msg.textContent="Connection problem.";}
+}
+document.getElementById("loginBtn").addEventListener("click",doLogin);
+document.getElementById("loginPw").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin();});
+document.getElementById("logoutBtn").addEventListener("click",async()=>{try{await fetch("/logout",{method:"POST"});}catch(e){}location.reload();});
+loadFromServer();
+</script>
+</body>
+</html>

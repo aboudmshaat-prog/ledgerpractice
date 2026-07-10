@@ -1,0 +1,6 @@
+# Never commit data or secrets
+data/
+*.env
+.session_secret
+node_modules/
+.DS_Store
