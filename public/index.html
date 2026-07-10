@@ -90,6 +90,7 @@ h3.sec{font-size:13px;color:var(--navy);margin:6px 0 8px;text-transform:uppercas
       <a data-v="upload"><span class="ico">📥</span><span class="lbl">Upload statement</span></a>
       <a data-v="review"><span class="ico">✅</span><span class="lbl">Review queue</span></a>
       <a data-v="reports"><span class="ico">📊</span><span class="lbl">Reports</span></a>
+      <a data-v="mgmt"><span class="ico">📝</span><span class="lbl">Management accounts</span></a>
     </nav>
     <div class="foot">Runs entirely on your computer.<br>Nothing is sent anywhere.<br>Use test data only.</div>
   </aside>
@@ -185,11 +186,13 @@ function uid(){return Math.random().toString(36).slice(2,9);}
 
 /* ============ VIEWS ============ */
 let view="clients";
+let mgmtMonth=null;
 const TITLES={clients:["Clients","Add the businesses whose books you keep."],
  opening:["Opening balances","Set the client's starting position. Debits must equal credits."],
  upload:["Upload statement","Import a bank statement, with safety checks before anything posts."],
  review:["Review queue","Check and correct how each transaction was categorised."],
- reports:["Reports","Live Profit & Loss, Balance Sheet and key figures."]};
+ reports:["Reports","Live Profit & Loss, Balance Sheet and key figures."],
+ mgmt:["Management accounts","Monthly variance analysis and auto-drafted commentary."]};
 
 function setView(v){view=v;
  document.querySelectorAll("#nav a").forEach(a=>a.classList.toggle("active",a.dataset.v===v));
@@ -213,6 +216,7 @@ function render(){
  if(view==="upload")el.innerHTML=viewUpload(c);
  if(view==="review")el.innerHTML=viewReview(c);
  if(view==="reports")el.innerHTML=viewReports(c);
+ if(view==="mgmt")el.innerHTML=viewMgmt(c);
  bindView();
 }
 
@@ -378,6 +382,68 @@ function viewReports(c){
   <div class="card"><div class="mini">Note: this is a working demonstration on test data. Figures depend on the opening balances and categories you set. Have an accountant review before relying on any output.</div></div>`;
 }
 
+/* ============ MANAGEMENT ACCOUNTS ============ */
+const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+function monthName(ym){if(!ym||ym.indexOf("-")<0)return ym||"";const[y,m]=ym.split("-");return (MONTHS[parseInt(m,10)-1]||"")+" "+y;}
+function pct(cur,prev){if(prev==null||prev===0)return null;return Math.round((cur-prev)/Math.abs(prev)*1000)/10;}
+function monthlyFigures(c,st){
+ const bal={};
+ st.txns.forEach(t=>buildJournal(t,t.code,c).forEach(e=>bal[e.code]=(bal[e.code]||0)+e.amountPence));
+ let income=0,expense=0;const cats={};
+ for(const code in bal){const a=ACCOUNTS[code];if(!a||a.stmt!=="PL")continue;const v=bal[code];
+  if(a.type==="income")income+=-v;else{expense+=v;cats[a.name]=(cats[a.name]||0)+v;}}
+ return {income,expense,net:income-expense,cats,closing:st.closingPence,ym:st.ym};
+}
+function deltaCell(cur,prev){
+ if(prev==null)return '<span class="mini">—</span>';
+ const d=cur-prev,p=pct(cur,prev),col=d>=0?"#1f7d51":"#b23a32",arrow=d>=0?"▲":"▼";
+ return `<span style="color:${col}">${arrow} ${money(Math.abs(d))}${p==null?"":" ("+Math.abs(p)+"%)"}</span>`;
+}
+function buildCommentary(c,cur,prev,ly,topCat){
+ const mn=monthName(cur.ym),s=[];
+ let rev=`In ${mn}, ${c.name} generated revenue of ${money(cur.income)}`;
+ if(prev){const p=pct(cur.income,prev.income);if(p!=null)rev+=`, ${p>=0?"up":"down"} ${Math.abs(p)}% (${money(Math.abs(cur.income-prev.income))}) on the previous month`;}
+ if(ly){const p=pct(cur.income,ly.income);if(p!=null)rev+=`${prev?", and":","} ${p>=0?"up":"down"} ${Math.abs(p)}% against the same month last year`;}
+ rev+=".";s.push(rev);
+ const margin=cur.income?Math.round(cur.net/cur.income*1000)/10:0;
+ let prof=`The business ${cur.net>=0?"recorded a net profit":"recorded a net loss"} of ${money(Math.abs(cur.net))}`;
+ if(cur.income)prof+=`, a net margin of ${margin}%`;
+ if(prev){const d=cur.net-prev.net;prof+=`; this is ${d>=0?"an improvement of":"a reduction of"} ${money(Math.abs(d))} versus the prior month`;}
+ prof+=".";s.push(prof);
+ let exp=`Total operating expenses were ${money(cur.expense)}`;
+ if(topCat){const share=cur.expense?Math.round(topCat[1]/cur.expense*100):0;exp+=`, the largest being ${topCat[0]} at ${money(topCat[1])} (${share}% of costs)`;}
+ exp+=".";s.push(exp);
+ if(prev){let mover=null,moverD=0;const keys=new Set([...Object.keys(cur.cats),...Object.keys(prev.cats)]);
+  keys.forEach(k=>{const d=(cur.cats[k]||0)-(prev.cats[k]||0);if(Math.abs(d)>Math.abs(moverD)){moverD=d;mover=k;}});
+  if(mover&&Math.abs(moverD)>0)s.push(`The most notable cost movement was ${mover}, which ${moverD>=0?"increased":"decreased"} by ${money(Math.abs(moverD))} compared with the previous month.`);}
+ s.push(`The closing bank balance for the month stood at ${money(cur.closing)}.`);
+ s.push(`These figures are drawn from the reconciled bank data for the period and should be reviewed alongside any accruals, prepayments or other adjustments before finalisation.`);
+ return s.map(x=>"<p style='margin:0 0 10px'>"+x+"</p>").join("");
+}
+function viewMgmt(c){
+ const sts=(db.statements[c.id]||[]).filter(s=>s.reconciled).slice().sort((a,b)=>a.ym<b.ym?-1:1);
+ if(!sts.length)return `<div class="card"><div class="empty">No reconciled months yet. Import and reconcile a statement first (a green month in Upload).</div></div>`;
+ const sel=(mgmtMonth&&sts.find(s=>s.ym===mgmtMonth))?mgmtMonth:sts[sts.length-1].ym;
+ const idx=sts.findIndex(s=>s.ym===sel);
+ const cur=monthlyFigures(c,sts[idx]);
+ const prev=idx>0?monthlyFigures(c,sts[idx-1]):null;
+ const[y,m]=sel.split("-");const lyStmt=sts.find(s=>s.ym===(parseInt(y,10)-1)+"-"+m);
+ const ly=lyStmt?monthlyFigures(c,lyStmt):null;
+ const catArr=Object.entries(cur.cats).sort((a,b)=>b[1]-a[1]);const topCat=catArr[0];
+ const commentary=buildCommentary(c,cur,prev,ly,topCat);
+ const picker=`<select id="mgmtPick">${sts.map(s=>`<option value="${s.ym}" ${s.ym===sel?"selected":""}>${monthName(s.ym)}</option>`).join("")}</select>`;
+ const vrow=(label,cv,pv,lv)=>`<tr><td>${label}</td><td class="num">${money(cv)}</td><td class="num">${pv==null?'<span class="mini">—</span>':money(pv)}</td><td class="num">${deltaCell(cv,pv)}</td><td class="num">${lv==null?'<span class="mini">—</span>':money(lv)}</td><td class="num">${deltaCell(cv,lv)}</td></tr>`;
+ return `<div class="card"><div class="row" style="align-items:center;gap:10px"><div class="mini">Reporting month:</div> ${picker}</div></div>
+  <div class="card"><h2>Variance analysis — ${monthName(sel)}</h2>
+   <div class="desc">This month against the prior month and the same month last year.</div>
+   <table><thead><tr><th></th><th class="num">This month</th><th class="num">Prev month</th><th class="num">&Delta; MoM</th><th class="num">Same mth last yr</th><th class="num">&Delta; YoY</th></tr></thead>
+   <tbody>${vrow("Revenue",cur.income,prev&&prev.income,ly&&ly.income)}${vrow("Expenses",cur.expense,prev&&prev.expense,ly&&ly.expense)}${vrow("Net profit",cur.net,prev&&prev.net,ly&&ly.net)}</tbody></table></div>
+  <div class="card"><h2>Executive commentary</h2>
+   <div class="desc">Auto-drafted from the reconciled figures. Click to edit before sharing — you are the author.</div>
+   <div id="commentary" contenteditable="true" style="border:1px solid var(--line);border-radius:10px;padding:14px 16px;font-size:14px;line-height:1.7;min-height:110px">${commentary}</div>
+   <div class="row" style="margin-top:12px"><button class="btn sec" id="copyComm">Copy text</button><button class="btn sec" id="printComm">Print / Save as PDF</button></div></div>`;
+}
+
 /* ============ BINDINGS ============ */
 function bindView(){
  // clients
@@ -412,6 +478,14 @@ function bindView(){
  document.querySelectorAll("[data-confirm]").forEach(b=>b.onclick=()=>{setConfirm(c,b.dataset.confirm,true);});
  const ca=document.getElementById("confirmAll");
  if(ca)ca.onclick=()=>{(db.statements[c.id]||[]).forEach(st=>st.txns.forEach(t=>t.confirmed=true));save();render();};
+
+ // management accounts
+ const mp=document.getElementById("mgmtPick");
+ if(mp)mp.onchange=()=>{mgmtMonth=mp.value;render();};
+ const cc=document.getElementById("copyComm");
+ if(cc)cc.onclick=()=>{const t=document.getElementById("commentary").innerText;navigator.clipboard.writeText(t).then(()=>{cc.textContent="Copied ✓";setTimeout(()=>cc.textContent="Copy text",1400);});};
+ const pc=document.getElementById("printComm");
+ if(pc)pc.onclick=()=>window.print();
 }
 function val(id){const e=document.getElementById(id);return e?e.value.trim():"";}
 function doImport(c){
