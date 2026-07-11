@@ -283,7 +283,7 @@ function viewUpload(c){
   </div>
   <div id="pdfNote" class="mini" style="margin-top:6px"></div>
   <div class="row" style="margin-top:12px">
-   <div class="field"><label>File name (YYYY-MM_Company_Bank)</label><input id="uName" value="" placeholder="2026-06_Acme_Barclays.pdf" style="width:280px"></div>
+   <div class="field"><label>Statement month (auto from PDF)</label><input type="month" id="uMonth" style="width:170px"></div>
    <div class="field"><label>Opening balance (£)</label><input id="uOpen" value="" placeholder="0.00" style="width:130px"></div>
    <div class="field"><label>Closing balance (£)</label><input id="uClose" value="" placeholder="0.00" style="width:130px"></div>
   </div>
@@ -506,7 +506,7 @@ function bindView(){
  const imp=document.getElementById("uImport");
  if(imp)imp.onclick=()=>doImport(c);
  const smp=document.getElementById("uSample");
- if(smp)smp.onclick=()=>{document.getElementById("uCsv").value=SAMPLE;document.getElementById("uName").value="2026-06_Acme_Barclays.csv";document.getElementById("uOpen").value="1000.00";document.getElementById("uClose").value="1430.12";};
+ if(smp)smp.onclick=()=>{document.getElementById("uCsv").value=SAMPLE;document.getElementById("uMonth").value="2026-06";document.getElementById("uOpen").value="1000.00";document.getElementById("uClose").value="1430.12";};
  const upd=document.getElementById("uPdf");
  if(upd)upd.onchange=()=>handlePdf(upd.files[0]);
  const sp=document.getElementById("savePeriod");
@@ -542,25 +542,25 @@ async function handlePdf(file){
   document.getElementById("uCsv").value=csv;
   if(d.opening!=null)document.getElementById("uOpen").value=d.opening.toFixed(2);
   if(d.closing!=null)document.getElementById("uClose").value=d.closing.toFixed(2);
-  if(d.ym){const ac=activeClient();const slug=(ac?ac.name:"client").replace(/[^A-Za-z0-9]/g,"").slice(0,20)||"client";document.getElementById("uName").value=d.ym+"_"+slug+"_Lloyds.pdf";}
+  if(d.ym)document.getElementById("uMonth").value=d.ym;
   const ok=d.closing!=null&&Math.abs(d.computed-d.closing)<0.005;
   note.innerHTML=`Statement period: <b>${d.periodStart||"?"} to ${d.periodEnd||"?"}</b> (month ${d.ym||"?"}).<br>Read <b>${d.count}</b> transactions. Opening <b>${money(Math.round((d.opening||0)*100))}</b>, closing <b>${money(Math.round((d.closing||0)*100))}</b>. ${ok?"Balances reconcile &#10003; — review the rows below, then Check &amp; import.":"<b>Balances do not fully reconcile — please check the rows against your statement.</b>"}`;
  }catch(e){note.textContent="Could not read that PDF ("+(e&&e.message||e)+").";}
 }
 function doImport(c){
- const name=val("uName"),op=toPence(val("uOpen")),cl=toPence(val("uClose"));
+ const ym=val("uMonth"),op=toPence(val("uOpen")),cl=toPence(val("uClose"));
  const res=document.getElementById("uResult");
- if(!checkFilename(name)){res.innerHTML=`<div class="banner err">✗ File name doesn’t match <b>YYYY-MM_Company_Bank.csv</b>. Example: 2026-06_Acme_Barclays.csv</div>`;return;}
+ if(!/^\d{4}-\d{2}$/.test(ym)){res.innerHTML=`<div class="banner err">✗ Set the <b>Statement month</b> above — it fills in automatically when you choose a PDF.</div>`;return;}
  const txns=parseCSV(val("uCsv"));
  if(!txns.length){res.innerHTML=`<div class="banner err">✗ Couldn’t read any rows. Check the CSV has a header row with Date, Description, Amount.</div>`;return;}
  const rec=verifyBalance(op,cl,txns);
  if(!rec.ok){res.innerHTML=`<div class="banner err">✗ Statement doesn’t reconcile. Opening ${money(op)} + movements = ${money(rec.computed)}, but closing says ${money(cl)} (off by ${money(Math.abs(rec.variance))}). Nothing was posted.</div>`;return;}
- const m=name.match(/^(\d{4})-(\d{2})/);const ym=m?m[1]+"-"+m[2]:"";
- if(c.periodStart&&c.periodEnd&&ym&&!periodMonths(c).includes(ym)){res.innerHTML=`<div class="banner err">✗ This statement is dated <b>${monthName(ym)}</b>, outside this client's accounting period (${monthName(c.periodStart)} – ${monthName(c.periodEnd)}). Check the client/period. Nothing was posted.</div>`;return;}
+ const name=ym+"_"+((c.name||"client").replace(/[^A-Za-z0-9]/g,"").slice(0,20)||"client");
+ if(c.periodStart&&c.periodEnd&&!periodMonths(c).includes(ym)){res.innerHTML=`<div class="banner err">✗ This statement is dated <b>${monthName(ym)}</b>, outside this client's accounting period (${monthName(c.periodStart)} – ${monthName(c.periodEnd)}). Check the client/period. Nothing was posted.</div>`;return;}
  txns.forEach(t=>{const cat=categorise(t,c.capPence,c.dirRefs||[]);t.code=cat.code;t.conf=cat.conf;t.why=cat.why;t.confirmed=false;});
  db.statements[c.id]=db.statements[c.id]||[];
  // one statement per month — re-uploading a month replaces it; new months accumulate
- db.statements[c.id]=db.statements[c.id].filter(s=>ym?s.ym!==ym:s.filename!==name);
+ db.statements[c.id]=db.statements[c.id].filter(s=>s.ym!==ym);
  db.statements[c.id].push({id:uid(),filename:name,ym,openingPence:op,closingPence:cl,reconciled:true,txns});
  save();
  res.innerHTML=`<div class="banner ok">✓ Reconciled to zero and imported ${txns.length} transactions. Open the <b>Review queue</b> to check categories, then see the <b>Reports</b>.</div>`;
