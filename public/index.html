@@ -541,7 +541,7 @@ async function handlePdf(file){
   if(d.closing!=null)document.getElementById("uClose").value=d.closing.toFixed(2);
   if(d.ym){const ac=activeClient();const slug=(ac?ac.name:"client").replace(/[^A-Za-z0-9]/g,"").slice(0,20)||"client";document.getElementById("uName").value=d.ym+"_"+slug+"_Lloyds.pdf";}
   const ok=d.closing!=null&&Math.abs(d.computed-d.closing)<0.005;
-  note.innerHTML=`Read <b>${d.count}</b> transactions. Opening <b>${money(Math.round((d.opening||0)*100))}</b>, closing <b>${money(Math.round((d.closing||0)*100))}</b>. ${ok?"Balances reconcile &#10003; — review the rows below, then Check &amp; import.":"<b>Balances do not fully reconcile — please check the rows against your statement.</b>"}`;
+  note.innerHTML=`Statement period: <b>${d.periodStart||"?"} to ${d.periodEnd||"?"}</b> (month ${d.ym||"?"}).<br>Read <b>${d.count}</b> transactions. Opening <b>${money(Math.round((d.opening||0)*100))}</b>, closing <b>${money(Math.round((d.closing||0)*100))}</b>. ${ok?"Balances reconcile &#10003; — review the rows below, then Check &amp; import.":"<b>Balances do not fully reconcile — please check the rows against your statement.</b>"}`;
  }catch(e){note.textContent="Could not read that PDF ("+(e&&e.message||e)+").";}
 }
 function doImport(c){
@@ -553,6 +553,7 @@ function doImport(c){
  const rec=verifyBalance(op,cl,txns);
  if(!rec.ok){res.innerHTML=`<div class="banner err">✗ Statement doesn’t reconcile. Opening ${money(op)} + movements = ${money(rec.computed)}, but closing says ${money(cl)} (off by ${money(Math.abs(rec.variance))}). Nothing was posted.</div>`;return;}
  const m=name.match(/^(\d{4})-(\d{2})/);const ym=m?m[1]+"-"+m[2]:"";
+ if(c.periodStart&&c.periodEnd&&ym&&!periodMonths(c).includes(ym)){res.innerHTML=`<div class="banner err">✗ This statement is dated <b>${monthName(ym)}</b>, outside this client's accounting period (${monthName(c.periodStart)} – ${monthName(c.periodEnd)}). Check the client/period. Nothing was posted.</div>`;return;}
  txns.forEach(t=>{const cat=categorise(t,c.capPence,c.dirRefs||[]);t.code=cat.code;t.conf=cat.conf;t.why=cat.why;t.confirmed=false;});
  db.statements[c.id]=db.statements[c.id]||[];
  // one statement per month — re-uploading a month replaces it; new months accumulate
