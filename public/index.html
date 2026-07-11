@@ -381,7 +381,10 @@ function viewReports(c){
      <tr class="totrow"><td>Total assets</td><td class="num">${money(assets)}</td></tr>
      <tr><td colspan=2><h3 class="sec" style="margin:8px 0 2px">Liabilities</h3></td></tr>
      ${bsLiab.map(l=>`<tr><td>${l[0]}</td><td class="num">${money(l[1])}</td></tr>`).join("")||'<tr><td class="mini">None</td><td></td></tr>'}
-     <tr class="totrow"><td>Total liabilities</td><td class="num">${money(liab)}</td></tr>
+     <tr><td colspan=2><h3 class="sec" style="margin:8px 0 2px">Equity</h3></td></tr>
+     ${equity?`<tr><td>Capital &amp; Reserves</td><td class="num">${money(equity)}</td></tr>`:''}
+     <tr><td>Retained profit (this period)</td><td class="num">${money(net)}</td></tr>
+     <tr class="totrow"><td>Total liabilities &amp; equity</td><td class="num">${money(liab+equity+net)}</td></tr>
     </tbody></table></div>
   </div>
   <div class="card"><div class="mini">Note: this is a working demonstration on test data. Figures depend on the opening balances and categories you set. Have an accountant review before relying on any output.</div></div>`;
