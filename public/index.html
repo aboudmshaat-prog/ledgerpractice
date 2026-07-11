@@ -118,6 +118,18 @@ let ACCOUNTS={
  "7600":{name:"Bank & Finance Charges",type:"expense",stmt:"PL",vatable:false},
  "7100":{name:"Rent & Premises",type:"expense",stmt:"PL",vatable:true},
  "7200":{name:"Travel & Subsistence",type:"expense",stmt:"PL",vatable:true},
+ "7003":{name:"Wages & Salaries",type:"expense",stmt:"PL"},
+ "7300":{name:"Motor & Fuel",type:"expense",stmt:"PL",vatable:true},
+ "7400":{name:"Subsistence & Meals",type:"expense",stmt:"PL",vatable:true},
+ "7406":{name:"Entertainment",type:"expense",stmt:"PL"},
+ "7502":{name:"Telephone & Internet",type:"expense",stmt:"PL",vatable:true},
+ "7501":{name:"Postage & Shipping",type:"expense",stmt:"PL",vatable:true},
+ "7130":{name:"Utilities (Gas/Elec/Water)",type:"expense",stmt:"PL",vatable:true},
+ "6201":{name:"Advertising & Marketing",type:"expense",stmt:"PL",vatable:true},
+ "5000":{name:"Cost of Sales / Materials",type:"expense",stmt:"PL",vatable:true},
+ "8201":{name:"Subscriptions",type:"expense",stmt:"PL",vatable:true},
+ "8204":{name:"Insurance",type:"expense",stmt:"PL"},
+ "7800":{name:"Repairs & Maintenance",type:"expense",stmt:"PL",vatable:true},
  "7000":{name:"General Expenses",type:"expense",stmt:"PL",vatable:true},
  "0050":{name:"Fixed Assets",type:"asset",stmt:"BS"},
  "1200":{name:"Bank Current Account",type:"asset",stmt:"BS"},
@@ -126,6 +138,7 @@ let ACCOUNTS={
  "2200":{name:"VAT Control",type:"liability",stmt:"BS"},
  "3000":{name:"Capital & Reserves",type:"equity",stmt:"BS"},
 };
+const DEFAULT_ACCOUNTS=JSON.parse(JSON.stringify(ACCOUNTS));
 const PL_CODES=Object.keys(ACCOUNTS).filter(c=>ACCOUNTS[c].stmt==="PL");
 const BS_CODES=Object.keys(ACCOUNTS).filter(c=>ACCOUNTS[c].stmt==="BS");
 // Standard chart-of-accounts templates (UK)
@@ -164,18 +177,35 @@ function parseCSV(text){
 }
 function checkFilename(n){return /^\d{4}-\d{2}_[A-Za-z0-9\-]+_[A-Za-z0-9\-]+\.(pdf|csv)$/i.test(n);}
 function verifyBalance(op,cl,txns){const mv=txns.reduce((a,t)=>a+t.amountPence,0);const c=op+mv;return{computed:c,variance:c-cl,ok:(c-cl)===0};}
+const CAT_RULES=[
+ ["6201",.8,"Advertising / marketing",/GOOGLE ADS|META ADS|META PLATFORMS|FACEBK|FACEBOOK|INSTAGRAM|LINKEDIN ADS|TIKTOK|ADVERTIS|MAILCHIMP|HUBSPOT|KLAVIYO|MARKETING/],
+ ["7500",.85,"Software / IT",/\bAWS\b|AMAZON WEB|GOOGLE CLOUD|GOOGLE WORKSPACE|GSUITE|MICROSOFT|AZURE|ADOBE|GITHUB|GITLAB|SLACK|ZOOM|DROPBOX|NOTION|CANVA|FIGMA|ATLASSIAN|\bJIRA\b|DIGITALOCEAN|HEROKU|VERCEL|NETLIFY|CLOUDFLARE|NAMECHEAP|GODADDY|123-REG|\bWIX\b|SQUARESPACE|SHOPIFY|SALESFORCE|QUICKBOOKS|INTUIT|\bXERO\b|\bSAGE\b|DOCUSIGN|OPENAI|ANTHROPIC|APPLE.COM\/BILL|SOFTWARE|\bSAAS\b|HOSTING|DOMAIN/],
+ ["7502",.85,"Telephone / internet",/VODAFONE|\bEE\b|\bO2\b|\bTHREE\b|GIFFGAFF|\bBT\b|\bSKY\b|VIRGIN MEDIA|PLUSNET|TALKTALK|\bGAMMA\b|MOBILE|BROADBAND|TELEPHONE|PHONE BILL/],
+ ["7130",.8,"Utilities",/BRITISH GAS|\bEDF\b|E.ON|\bEON\b|OCTOPUS ENERGY|\bSSE\b|\bOVO\b|SCOTTISH POWER|\bBULB\b|THAMES WATER|ANGLIAN WATER|SEVERN TRENT|UNITED UTILITIES|YORKSHIRE WATER|\bWATER\b|ELECTRIC|\bGAS\b|\bENERGY\b/],
+ ["7300",.8,"Motor / fuel",/\bSHELL\b|\bBP\b|\bESSO\b|TEXACO|\bGULF\b|MORRISONS PF|TESCO PETROL|SAINSBURYS PETROL|\bFUEL\b|PETROL|DIESEL|\bDVLA\b|CONGESTION|\bNCP\b|RINGGO|PARKING|EUROPCAR|ENTERPRISE RENT|\bHERTZ\b|\bAVIS\b/],
+ ["7200",.8,"Travel",/TRAINLINE|\bLNER\b|\bGWR\b|\bTFL\b|TRANSPORT FOR LONDON|NATIONAL EXPRESS|STAGECOACH|\bUBER\b|\bBOLT\b|ADDISON LEE|\bTAXI\b|EASYJET|RYANAIR|BRITISH AIRWAYS|\bJET2\b|\bWIZZ\b|BOOKING.COM|EXPEDIA|AIRBNB|TRAVELODGE|PREMIER INN|\bHOTEL\b|\bRAIL\b|\bTRAIN\b|\bFLIGHT\b/],
+ ["7400",.7,"Subsistence / meals",/COSTA|STARBUCKS|\bPRET\b|GREGGS|CAFFE NERO|MCDONALD|\bKFC\b|NANDO|SUBWAY|DELIVEROO|JUST EAT|UBER EATS|\bCAFE\b|RESTAURANT|COFFEE|\bBAKERY\b/],
+ ["7100",.75,"Rent / premises",/\bRENT\b|WEWORK|\bREGUS\b|WORKSPACE|SERVICED OFFICE|BUSINESS RATES|\bRATES\b|LANDLORD|\bLEASE\b/],
+ ["8204",.8,"Insurance",/INSURANCE|\bAVIVA\b|HISCOX|\bAXA\b|ADMIRAL|DIRECT LINE|ZURICH|SIMPLY BUSINESS|LEGAL & GENERAL/],
+ ["8201",.7,"Subscriptions",/SUBSCRIPTION|MEMBERSHIP|\bICAEW\b|\bACCA\b|LINKEDIN PREMIUM|PATREON|SUBSTACK/],
+ ["7501",.8,"Postage / shipping",/ROYAL MAIL|PARCELFORCE|\bDPD\b|\bHERMES\b|\bEVRI\b|\bUPS\b|FEDEX|\bDHL\b|POSTAGE|SHIPPING|COURIER/],
+ ["5000",.6,"Materials / stock",/SCREWFIX|TOOLSTATION|\bB&Q\b|WICKES|COSTCO|BOOKER|\bMAKRO\b|WHOLESALE|MATERIALS|SUPPLIES/],
+ ["7003",.7,"Wages / salaries",/\bSALARY\b|\bSALARIES\b|\bWAGES\b|PAYROLL|STAFF PAY|\bNET PAY\b/],
+ ["7600",.8,"Bank / finance charge",/BANK CHARGE|\bCHARGES\b|OVERDRAFT|SERVICE CHARGE|STRIPE FEE|CARD FEE|\bFX FEE\b|\bINTEREST\b|\bFEE\b/],
+];
 function categorise(t,cap,dirRefs){
  const d=t.description.toUpperCase(),out=t.amountPence<0;
  for(const ref of dirRefs){if(ref&&d.includes(ref.toUpperCase()))return{code:"2050",conf:.99,why:"Director reference → Director's Loan Account"};}
- if(out&&/(HMRC|VAT|PAYE|NIC|LOAN REPAY)/.test(d))return{code:"2100",conf:.9,why:"Liability settlement (tax/loan)"};
- if(t.amountPence>0)return{code:"4000",conf:.85,why:"Money in → Sales"};
- const asset=/(LAPTOP|COMPUTER|MACBOOK|EQUIPMENT|FURNITURE|VEHICLE|MACHINE|SERVER|IMAC)/.test(d);
+ if(out&&/\b(HMRC|VAT|PAYE|NIC|CORPORATION TAX|CORP TAX|LOAN REPAY|HIRE PURCHASE)\b/.test(d))return{code:"2100",conf:.9,why:"Liability settlement (tax/loan)"};
+ const asset=/(LAPTOP|COMPUTER|MACBOOK|IMAC|DESKTOP|MONITOR|EQUIPMENT|FURNITURE|MACHINE|SERVER|PRINTER|\bVAN\b|VEHICLE)/.test(d);
  if(out&&asset&&Math.abs(t.amountPence)>=cap)return{code:"0050",conf:.92,why:"Asset over £"+(cap/100).toLocaleString()+" → capitalised (Balance Sheet)"};
- if(/(AWS|GOOGLE|MICROSOFT|AZURE|XERO|ADOBE|SOFTWARE|SAAS|GITHUB|SLACK|ZOOM)/.test(d))return{code:"7500",conf:.8,why:"Software/IT keyword"};
- if(/(BANK CHARGE|INTEREST|FEE|STRIPE FEE)/.test(d))return{code:"7600",conf:.8,why:"Bank/finance charge"};
- if(/(RENT|OFFICE|PREMISES|WEWORK)/.test(d))return{code:"7100",conf:.75,why:"Rent/premises keyword"};
- if(/(TRAIN|UBER|HOTEL|FLIGHT|TRAVEL|RAIL)/.test(d))return{code:"7200",conf:.75,why:"Travel keyword"};
- return{code:"7000",conf:.5,why:"Unclassified → General Expenses (please review)"};
+ if(out){for(const [code,conf,why,re] of CAT_RULES){if(ACCOUNTS[code]&&re.test(d))return{code,conf,why};}}
+ if(t.amountPence>0){
+  if(/REFUND|REVERSAL|CHARGEBACK|CASHBACK/.test(d))return{code:"4900",conf:.6,why:"Refund / other income"};
+  if(/CREDIT INT|INTEREST/.test(d))return{code:"4900",conf:.6,why:"Interest received → other income"};
+  return{code:"4000",conf:.8,why:"Money in → Sales"};
+ }
+ return{code:"7000",conf:.45,why:"Unclear → General Expenses (please review)"};
 }
 function buildJournal(t,code,client){
  // Bank line sign: +in / -out. Ledger sign: +debit / -credit. Journal nets to zero.
@@ -231,7 +261,11 @@ function clientPick(){
  sel.innerHTML=db.clients.map(c=>`<option value="${c.id}" ${c.id===db.active?"selected":""}>${c.name}</option>`).join("");
 }
 
-function syncAccounts(){ if(db.accounts&&Object.keys(db.accounts).length){ACCOUNTS=db.accounts;} else {db.accounts=ACCOUNTS;} }
+function syncAccounts(){
+ if(db.accounts&&Object.keys(db.accounts).length){ACCOUNTS=db.accounts;} else {db.accounts=ACCOUNTS;}
+ let ch=false; for(const c in DEFAULT_ACCOUNTS){if(!ACCOUNTS[c]){ACCOUNTS[c]=Object.assign({},DEFAULT_ACCOUNTS[c]);ch=true;}}
+ if(ch)db.accounts=ACCOUNTS;
+}
 function persistAccounts(){db.accounts=ACCOUNTS;save();}
 function mergeChart(tpl,label){let n=0;for(const code in tpl){if(!ACCOUNTS[code]){ACCOUNTS[code]=Object.assign({},tpl[code]);n++;}}persistAccounts();render();alert("Added "+n+" new "+label+" accounts. Existing codes were kept.");}
 function viewChart(){
@@ -641,7 +675,7 @@ function doImport(c){
  if(!rec.ok){res.innerHTML=`<div class="banner err">✗ Statement doesn’t reconcile. Opening ${money(op)} + movements = ${money(rec.computed)}, but closing says ${money(cl)} (off by ${money(Math.abs(rec.variance))}). Nothing was posted.</div>`;return;}
  const name=ym+"_"+((c.name||"client").replace(/[^A-Za-z0-9]/g,"").slice(0,20)||"client");
  if(c.periodStart&&c.periodEnd&&!periodMonths(c).includes(ym)){res.innerHTML=`<div class="banner err">✗ This statement is dated <b>${monthName(ym)}</b>, outside this client's accounting period (${monthName(c.periodStart)} – ${monthName(c.periodEnd)}). Check the client/period. Nothing was posted.</div>`;return;}
- txns.forEach(t=>{const cat=categorise(t,c.capPence,c.dirRefs||[]);t.code=cat.code;t.conf=cat.conf;t.why=cat.why;t.confirmed=false;});
+ txns.forEach(t=>{const cat=categorise(t,c.capPence,c.dirRefs||[]);t.code=cat.code;t.conf=cat.conf;t.why=cat.why;t.confirmed=cat.conf>=0.8;});
  db.statements[c.id]=db.statements[c.id]||[];
  // one statement per month — re-uploading a month replaces it; new months accumulate
  db.statements[c.id]=db.statements[c.id].filter(s=>s.ym!==ym);
