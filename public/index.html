@@ -83,7 +83,7 @@ h3.sec{font-size:13px;color:var(--navy);margin:6px 0 8px;text-transform:uppercas
 </div>
 <div class="app">
   <aside class="side">
-    <div class="logo">LedgerPractice<small>working demo</small></div>
+    <div class="logo" style="display:flex;align-items:center;gap:10px"><svg width="38" height="36" viewBox="0 0 150 146" xmlns="http://www.w3.org/2000/svg" style="flex:none"><path d="M53,144 L53,72 Q53,22 75,10 Q97,22 97,72 L97,144" fill="none" stroke="#c3c7cc" stroke-width="12"/><path d="M16,144 L16,60 Q16,44 31,45 L74,120 L118,45 Q133,44 133,60 L133,144" fill="none" stroke="#29ABE2" stroke-width="19"/></svg><span>LedgerPractice</span></div>
     <nav class="nav" id="nav">
       <a data-v="clients" class="active"><span class="ico">🏢</span><span class="lbl">Clients</span></a>
       <a data-v="opening"><span class="ico">⚖️</span><span class="lbl">Opening balances</span></a>
@@ -92,7 +92,7 @@ h3.sec{font-size:13px;color:var(--navy);margin:6px 0 8px;text-transform:uppercas
       <a data-v="reports"><span class="ico">📊</span><span class="lbl">Reports</span></a>
       <a data-v="mgmt"><span class="ico">📝</span><span class="lbl">Management accounts</span></a>
     </nav>
-    <div class="foot">Runs entirely on your computer.<br>Nothing is sent anywhere.<br>Use test data only.</div>
+    <div class="foot">Secure &amp; private.<br>Your data on your own server.<br>Backed up nightly.</div>
   </aside>
 
   <main class="main">
@@ -291,7 +291,6 @@ function viewUpload(c){
    <textarea id="uCsv" rows="9" placeholder="Date,Description,Amount,Balance" style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px"></textarea></div>
   <div class="row" style="margin-top:12px">
    <button class="btn" id="uImport">Check &amp; import</button>
-   <button class="btn sec" id="uSample">Load demo sample</button>
   </div>
   <div id="uResult" style="margin-top:14px"></div>
  </div>
@@ -415,7 +414,7 @@ function viewReports(c){
      <tr class="totrow"><td>Total liabilities &amp; equity</td><td class="num">${money(liab+equity+net)}</td></tr>
     </tbody></table></div>
   </div>
-  <div class="card"><div class="mini">Note: this is a working demonstration on test data. Figures depend on the opening balances and categories you set. Have an accountant review before relying on any output.</div></div>`;
+  <div class="card"><div class="mini">Figures are built from the reconciled statements you upload and the categories you set. Have your accountant review the accounting treatment before finalising.</div></div>`;
 }
 
 /* ============ MANAGEMENT ACCOUNTS ============ */
