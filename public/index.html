@@ -194,8 +194,9 @@ const CAT_RULES=[
  ["7003",.7,"Wages / salaries",/\bSALARY\b|\bSALARIES\b|\bWAGES\b|PAYROLL|STAFF PAY|\bNET PAY\b/],
  ["7600",.8,"Bank / finance charge",/BANK CHARGE|\bCHARGES\b|OVERDRAFT|SERVICE CHARGE|STRIPE FEE|CARD FEE|\bFX FEE\b|\bINTEREST\b|\bFEE\b/],
 ];
-function categorise(t,cap,dirRefs){
+function categorise(t,cap,dirRefs,rules){
  const d=t.description.toUpperCase(),out=t.amountPence<0;
+ if(rules){for(const r of rules){if(r.match&&d.includes(r.match.toUpperCase())&&ACCOUNTS[r.code])return{code:r.code,conf:.98,why:"Bank rule ("+r.match+")"};}}
  for(const ref of dirRefs){if(ref&&d.includes(ref.toUpperCase()))return{code:"2050",conf:.99,why:"Director reference → Director's Loan Account"};}
  if(out&&/\b(HMRC|VAT|PAYE|NIC|CORPORATION TAX|CORP TAX|LOAN REPAY|HIRE PURCHASE)\b/.test(d))return{code:"2100",conf:.9,why:"Liability settlement (tax/loan)"};
  const asset=/(LAPTOP|COMPUTER|MACBOOK|IMAC|DESKTOP|MONITOR|EQUIPMENT|FURNITURE|MACHINE|SERVER|PRINTER|\bVAN\b|VEHICLE)/.test(d);
@@ -441,13 +442,21 @@ function statementsList(c){
 
 /* ---- Review ---- */
 function allTxns(c){const out=[];(db.statements[c.id]||[]).forEach(st=>st.txns.forEach(t=>out.push({st:st.id,t})));return out;}
+function clientRules(c){return (db.rules&&db.rules[c.id])||[];}
+function applyRules(c){const rules=clientRules(c);if(!rules.length)return;
+ (db.statements[c.id]||[]).forEach(st=>st.txns.forEach(t=>{const d=t.description.toUpperCase();
+  for(const r of rules){if(r.match&&d.includes(r.match.toUpperCase())&&ACCOUNTS[r.code]){t.code=r.code;t.conf=.98;t.why="Bank rule";t.confirmed=true;break;}}}));}
+function rulesCard(c){const rs=clientRules(c);
+ if(!rs.length)return `<div class="card"><div class="mini">No bank rules yet. In the list above, click <b>+Rule</b> on a transaction to teach a payee &rarr; category, and it'll auto-apply on every future import.</div></div>`;
+ return `<div class="card"><h2>Bank rules — ${c.name}</h2><div class="desc">When a description contains the text, it's auto-categorised and confirmed on every import.</div>
+  <table><tbody>${rs.map((r,i)=>`<tr><td>Contains "<b>${r.match}</b>"</td><td>&rarr; ${ACCOUNTS[r.code]?ACCOUNTS[r.code].name:r.code}</td><td class="num"><button class="btn sm ghost" data-delrule="${i}">Delete</button></td></tr>`).join("")}</tbody></table></div>`;}
 function viewReview(c){
  const rows=allTxns(c);
  if(!rows.length)return `<div class="card"><div class="empty">No transactions yet. Import a statement first.</div></div>`;
  rows.sort((a,b)=>a.t.conf-b.t.conf);
  const pending=rows.filter(r=>!r.t.confirmed);
  const doneCount=rows.length-pending.length;
- if(!pending.length)return `<div class="card"><div class="banner ok">&#10003; All ${rows.length} transaction(s) reviewed and confirmed — nothing left in the queue.</div></div>`;
+ if(!pending.length)return `<div class="card"><div class="banner ok">&#10003; All ${rows.length} transaction(s) reviewed and confirmed — nothing left in the queue.</div></div>`+rulesCard(c);
  const cats=[...new Set(pending.map(r=>r.t.code))].sort();
  if(reviewCat!=="all"&&!cats.includes(reviewCat))reviewCat="all";
  const shown=reviewCat==="all"?pending:pending.filter(r=>r.t.code===reviewCat);
@@ -461,7 +470,7 @@ function viewReview(c){
    <td><select data-cat="${st}:${t.line}">${Object.keys(ACCOUNTS).map(code=>`<option value="${code}" ${code===t.code?"selected":""}>${ACCOUNTS[code].name}</option>`).join("")}</select></td>
    <td><span class="pill ${a.stmt==='BS'?'bs':'pl'}">${a.stmt}</span></td>
    <td><span class="confbar"><span style="width:${conf}%;background:${col}"></span></span> <span class="mini">${conf}%</span></td>
-   <td>${t.confirmed?'<span class="pill green">Confirmed</span>':`<button class="btn sm sec" data-confirm="${st}:${t.line}">Confirm</button>`}</td>
+   <td style="white-space:nowrap"><button class="btn sm sec" data-confirm="${st}:${t.line}">Confirm</button> <button class="btn sm ghost" data-rule="${st}:${t.line}">+Rule</button></td>
   </tr>`;
  }).join("")||'<tr><td colspan=7 class="mini">No transactions in this category.</td></tr>';
  const low=pending.filter(r=>r.t.conf<0.6).length;
@@ -474,7 +483,7 @@ function viewReview(c){
   <table><thead><tr><th>Date</th><th>Description</th><th class="num">Amount</th><th>Account</th><th>Goes to</th><th>Confidence</th><th></th></tr></thead>
    <tbody>${body}</tbody></table>
   <div class="row" style="margin-top:12px"><button class="btn sec" id="confirmAll">Confirm all</button></div>
- </div>`;
+ </div>${rulesCard(c)}`;
 }
 
 /* ---- Reports ---- */
@@ -687,6 +696,15 @@ function bindView(){
  if(ca)ca.onclick=()=>{(db.statements[c.id]||[]).forEach(st=>st.txns.forEach(t=>t.confirmed=true));save();render();};
  const rf=document.getElementById("reviewCat");
  if(rf)rf.onchange=()=>{reviewCat=rf.value;render();};
+ // bank rules
+ document.querySelectorAll("[data-rule]").forEach(b=>b.onclick=()=>{const t=findTxn(c,b.dataset.rule);if(!t)return;
+  const sug=t.description.replace(/[0-9]/g,"").trim().split(/\s+/).slice(0,2).join(" ");
+  const cat=ACCOUNTS[t.code]?ACCOUNTS[t.code].name:t.code;
+  const kw=prompt("Bank rule for "+c.name+": when a description contains this text, always use \""+cat+"\".\n\nText to match:",sug);
+  if(!kw||!kw.trim())return;
+  db.rules=db.rules||{};db.rules[c.id]=db.rules[c.id]||[];db.rules[c.id].push({match:kw.trim(),code:t.code});
+  applyRules(c);save();render();});
+ document.querySelectorAll("[data-delrule]").forEach(b=>b.onclick=()=>{if(db.rules&&db.rules[c.id]){db.rules[c.id].splice(b.dataset.delrule,1);save();render();}});
  // trial balance drill-down
  document.querySelectorAll("[data-tb]").forEach(r=>r.onclick=()=>{tbAccount=r.dataset.tb;render();});
  const tbc=document.getElementById("tbClose");
@@ -756,7 +774,7 @@ function doImport(c){
  if(!rec.ok){res.innerHTML=`<div class="banner err">✗ Statement doesn’t reconcile. Opening ${money(op)} + movements = ${money(rec.computed)}, but closing says ${money(cl)} (off by ${money(Math.abs(rec.variance))}). Nothing was posted.</div>`;return;}
  const name=ym+"_"+((c.name||"client").replace(/[^A-Za-z0-9]/g,"").slice(0,20)||"client");
  if(c.periodStart&&c.periodEnd&&!periodMonths(c).includes(ym)){res.innerHTML=`<div class="banner err">✗ This statement is dated <b>${monthName(ym)}</b>, outside this client's accounting period (${monthName(c.periodStart)} – ${monthName(c.periodEnd)}). Check the client/period. Nothing was posted.</div>`;return;}
- txns.forEach(t=>{const cat=categorise(t,c.capPence,c.dirRefs||[]);t.code=cat.code;t.conf=cat.conf;t.why=cat.why;t.confirmed=cat.conf>=0.8;});
+ txns.forEach(t=>{const cat=categorise(t,c.capPence,c.dirRefs||[],clientRules(c));t.code=cat.code;t.conf=cat.conf;t.why=cat.why;t.confirmed=cat.conf>=0.8;});
  db.statements[c.id]=db.statements[c.id]||[];
  // one statement per month — re-uploading a month replaces it; new months accumulate
  db.statements[c.id]=db.statements[c.id].filter(s=>s.ym!==ym);
