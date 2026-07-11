@@ -268,6 +268,11 @@ function syncAccounts(){
 }
 function persistAccounts(){db.accounts=ACCOUNTS;save();}
 function mergeChart(tpl,label){let n=0;for(const code in tpl){if(!ACCOUNTS[code]){ACCOUNTS[code]=Object.assign({},tpl[code]);n++;}}persistAccounts();render();alert("Added "+n+" new "+label+" accounts. Existing codes were kept.");}
+// Standard UK nominal code ranges by category
+const CODE_RANGES={asset:[0,1999],liability:[2000,2999],equity:[3000,3999],income:[4000,4999],expense:[5000,9999]};
+function rangeLabel(type){const r=CODE_RANGES[type]||[0,9999];return String(r[0]).padStart(4,"0")+"–"+r[1];}
+function nextCode(type){const [lo,hi]=CODE_RANGES[type]||[0,9999];let max=lo-10;for(const c in ACCOUNTS){const n=parseInt(c,10);if(!isNaN(n)&&n>=lo&&n<=hi&&n>max)max=n;}
+ let n=Math.min(hi,Math.max(lo,max+10));while((ACCOUNTS[String(n).padStart(4,"0")]||ACCOUNTS[String(n)])&&n<hi)n+=10;return String(n).padStart(4,"0");}
 function viewChart(){
  const codes=Object.keys(ACCOUNTS).sort().filter(code=>{const a=ACCOUNTS[code];if(chartFilter==="all")return true;if(chartFilter==="PL"||chartFilter==="BS")return a.stmt===chartFilter;return a.type===chartFilter;});
  const TYPES=["asset","liability","equity","income","expense"];
@@ -292,7 +297,8 @@ function viewChart(){
     <div class="field"><label>Statement</label><select id="acStmt"><option>PL</option><option>BS</option></select></div>
     <div class="field"><label>VATable</label><label style="padding:10px 0;display:block"><input type="checkbox" id="acVat"></label></div>
     <button class="btn" id="acAdd">Add account</button>
-   </div></div>
+   </div><div id="acRange" class="mini" style="margin-top:10px"></div>
+   <div class="mini" style="margin-top:6px">Standard UK ranges — Assets 0000–1999 · Liabilities 2000–2999 · Capital 3000–3999 · Income 4000–4999 · Expenses 5000–9999.</div></div>
   <div class="card"><h2>Load a standard chart (UK)</h2>
    <div class="desc">Adds the standard nominal codes used by these packages; your existing codes are kept. Auto-categorisation stays tuned to the Sage-style codes — Xero codes are added for manual selection.</div>
    <div class="row"><button class="btn sec" id="loadSage">Load Sage 50 standard</button> <button class="btn sec" id="loadXero">Load Xero standard</button></div></div>`;
@@ -637,11 +643,19 @@ function bindView(){
  document.querySelectorAll("[data-as]").forEach(s=>s.onchange=()=>{ACCOUNTS[s.dataset.as].stmt=s.value;persistAccounts();});
  document.querySelectorAll("[data-av]").forEach(cb=>cb.onchange=()=>{ACCOUNTS[cb.dataset.av].vatable=cb.checked;persistAccounts();});
  document.querySelectorAll("[data-adel]").forEach(b=>b.onclick=()=>{if(confirm("Delete account "+b.dataset.adel+"? Any transactions using it will need re-categorising.")){delete ACCOUNTS[b.dataset.adel];persistAccounts();render();}});
+ const at=document.getElementById("acType");
+ function updRange(){if(!at)return;const type=at.value;const rng=document.getElementById("acRange");
+  if(rng)rng.innerHTML=`Codes for <b>${type}</b> use range <b>${rangeLabel(type)}</b>. Next free code: <b>${nextCode(type)}</b> (leave the code blank to use it).`;
+  const st=document.getElementById("acStmt");if(st)st.value=(type==="income"||type==="expense")?"PL":"BS";
+  const cc=document.getElementById("acCode");if(cc)cc.placeholder=nextCode(type);}
+ if(at){at.onchange=updRange;updRange();}
  const aa=document.getElementById("acAdd");
- if(aa)aa.onclick=()=>{const code=val("acCode").trim();
+ if(aa)aa.onclick=()=>{const type=document.getElementById("acType").value;let code=val("acCode").trim()||nextCode(type);
   if(!/^[A-Za-z0-9]+$/.test(code))return alert("Enter a code using letters/numbers, e.g. 7300.");
-  if(ACCOUNTS[code])return alert("That code already exists.");
-  ACCOUNTS[code]={name:val("acName")||code,type:document.getElementById("acType").value,stmt:document.getElementById("acStmt").value,vatable:document.getElementById("acVat").checked};
+  if(ACCOUNTS[code])return alert("Code "+code+" already exists (\""+ACCOUNTS[code].name+"\"). Choose a different code.");
+  const n=parseInt(code,10),r=CODE_RANGES[type]||[0,9999];
+  if(!isNaN(n)&&(n<r[0]||n>r[1])&&!confirm("Code "+code+" is outside the usual range for "+type+" ("+rangeLabel(type)+"). Add it anyway?"))return;
+  ACCOUNTS[code]={name:val("acName")||code,type,stmt:document.getElementById("acStmt").value,vatable:document.getElementById("acVat").checked};
   persistAccounts();render();};
 }
 function val(id){const e=document.getElementById(id);return e?e.value.trim():"";}
