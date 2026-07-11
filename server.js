@@ -170,6 +170,45 @@ function parseLloyds(text) {
   return { opening: opening / 100, closing: closing == null ? null : closing / 100, ym, periodStart, periodEnd, computed: prev / 100, count: rows.length, rows };
 }
 
+// --- HSBC Kinetic current-account parser (separate Paid out / Paid in / Balance columns) ---
+function parseHSBC(text) {
+  const lines = text.split(/\r?\n/);
+  const flat = text.replace(/ +/g, "");
+  const mp = s => Math.round(parseFloat(s.replace(/,/g, "")) * 100);
+  const om = flat.match(/OpeningBalance([\d,]+\.\d{2})/i);
+  const cm = flat.match(/ClosingBalance([\d,]+\.\d{2})/i);
+  const opening = om ? mp(om[1]) : 0;
+  const closing = cm ? mp(cm[1]) : null;
+  const MON = { Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12 };
+  const dateRe = /(\d{2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{2})/;
+  const typeRe = /\b(BP|CR|DR|DD|TFR|ATM|SO|BGC|VIS|CHG|POS)\b/g;
+  let curDate = null, ym = null, pending = "", started = false, periodStart = null, periodEnd = null, prev = opening;
+  const rows = [];
+  lines.forEach(line => {
+    const dm = line.match(dateRe);
+    if (dm) { curDate = dm[1] + " " + dm[2] + " " + dm[3]; ym = "20" + dm[3] + "-" + String(MON[dm[2]]).padStart(2, "0"); }
+    if (/BALANCE BROUGHT FORWARD/i.test(line)) { started = true; pending = ""; periodStart = curDate; return; }
+    if (/BALANCE CARRIED FORWARD/i.test(line)) { started = false; pending = ""; periodEnd = curDate; return; }
+    if (!started) return;
+    const nums = []; const re = /[\d,]+\.\d{2}/g; let m;
+    while ((m = re.exec(line))) nums.push({ v: mp(m[0]), end: m.index + m[0].length });
+    let amount = null;
+    nums.forEach(n => { if (n.end < 110) amount = -Math.abs(n.v); else if (n.end < 135) amount = Math.abs(n.v); });
+    const desc = line.replace(dateRe, "").replace(/[\d,]+\.\d{2}/g, "").replace(typeRe, "").replace(/\s+/g, " ").trim();
+    if (desc) pending = (pending ? pending + " " : "") + desc;
+    if (amount !== null) { prev += amount; rows.push({ date: curDate, description: pending || "Transaction", amount: amount / 100, balance: prev / 100 }); pending = ""; }
+  });
+  return { opening: opening / 100, closing: closing == null ? null : closing / 100, ym, periodStart, periodEnd, computed: prev / 100, count: rows.length, rows };
+}
+
+// --- pick the right parser for the bank ---
+function parseStatement(text) {
+  const bank = /HSBC/i.test(text) ? "HSBC" : /Lloyds/i.test(text) ? "Lloyds" : "Unknown";
+  const r = bank === "HSBC" ? parseHSBC(text) : parseLloyds(text);
+  r.bank = bank;
+  return r;
+}
+
 // --- server ---
 const server = http.createServer((req, res) => {
   const url = req.url.split("?")[0];
@@ -221,7 +260,7 @@ const server = http.createServer((req, res) => {
       execFile("pdftotext", ["-layout", tmp, "-"], { maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
         fs.unlink(tmp, () => {});
         if (err) return json(res, 500, { error: "pdftotext failed — is poppler-utils installed on the server?" });
-        try { return json(res, 200, parseLloyds(stdout)); }
+        try { return json(res, 200, parseStatement(stdout)); }
         catch (e) { return json(res, 500, { error: "Could not parse the statement" }); }
       });
     });

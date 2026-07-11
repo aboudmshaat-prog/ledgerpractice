@@ -187,6 +187,7 @@ function uid(){return Math.random().toString(36).slice(2,9);}
 /* ============ VIEWS ============ */
 let view="clients";
 let mgmtMonth=null;
+let pdfBank="";
 const TITLES={clients:["Clients","Add the businesses whose books you keep."],
  opening:["Opening balances","Set the client's starting position. Debits must equal credits."],
  upload:["Upload statement","Import a bank statement, with safety checks before anything posts."],
@@ -536,6 +537,7 @@ async function handlePdf(file){
   const r=await fetch("/api/parse-pdf",{method:"POST",headers:{"Content-Type":"application/pdf"},body:buf});
   if(!r.ok){const e=await r.json().catch(()=>({}));note.textContent="Could not read the PDF: "+(e.error||("error "+r.status));return;}
   const d=await r.json();
+  pdfBank=d.bank||"";
   if(!d.count){note.innerHTML="No transactions found. This may not be a Lloyds statement, or its layout differs. Paste the rows as CSV, or send me a sample and I will add support for that bank.";return;}
   const csv=["Date,Description,Amount,Balance"].concat(d.rows.map(x=>[x.date,String(x.description).replace(/,/g,";"),x.amount.toFixed(2),x.balance.toFixed(2)].join(","))).join("\n");
   document.getElementById("uCsv").value=csv;
@@ -543,7 +545,7 @@ async function handlePdf(file){
   if(d.closing!=null)document.getElementById("uClose").value=d.closing.toFixed(2);
   if(d.ym)document.getElementById("uMonth").value=d.ym;
   const ok=d.closing!=null&&Math.abs(d.computed-d.closing)<0.005;
-  note.innerHTML=`Statement period: <b>${d.periodStart||"?"} to ${d.periodEnd||"?"}</b> (month ${d.ym||"?"}).<br>Read <b>${d.count}</b> transactions. Opening <b>${money(Math.round((d.opening||0)*100))}</b>, closing <b>${money(Math.round((d.closing||0)*100))}</b>. ${ok?"Balances reconcile &#10003; — review the rows below, then Check &amp; import.":"<b>Balances do not fully reconcile — please check the rows against your statement.</b>"}`;
+  note.innerHTML=`Detected bank: <b>${d.bank||"Unknown"}</b> — ${d.bank&&d.bank!=="Unknown"?d.bank+" rules applied":"unrecognised format, check the rows carefully"}.<br>Statement period: <b>${d.periodStart||"?"} to ${d.periodEnd||"?"}</b> (month ${d.ym||"?"}).<br>Read <b>${d.count}</b> transactions. Opening <b>${money(Math.round((d.opening||0)*100))}</b>, closing <b>${money(Math.round((d.closing||0)*100))}</b>. ${ok?"Balances reconcile &#10003; — review the rows below, then Check &amp; import.":"<b>Balances do not fully reconcile — please check the rows against your statement.</b>"}`;
  }catch(e){note.textContent="Could not read that PDF ("+(e&&e.message||e)+").";}
 }
 function doImport(c){
@@ -560,7 +562,7 @@ function doImport(c){
  db.statements[c.id]=db.statements[c.id]||[];
  // one statement per month — re-uploading a month replaces it; new months accumulate
  db.statements[c.id]=db.statements[c.id].filter(s=>s.ym!==ym);
- db.statements[c.id].push({id:uid(),filename:name,ym,openingPence:op,closingPence:cl,reconciled:true,txns});
+ db.statements[c.id].push({id:uid(),filename:name,ym,bank:pdfBank||"",openingPence:op,closingPence:cl,reconciled:true,txns});
  save();
  res.innerHTML=`<div class="banner ok">✓ Reconciled to zero and imported ${txns.length} transactions. Open the <b>Review queue</b> to check categories, then see the <b>Reports</b>.</div>`;
  setTimeout(render,900);
