@@ -441,9 +441,12 @@ function viewReview(c){
  const rows=allTxns(c);
  if(!rows.length)return `<div class="card"><div class="empty">No transactions yet. Import a statement first.</div></div>`;
  rows.sort((a,b)=>a.t.conf-b.t.conf);
- const cats=[...new Set(rows.map(r=>r.t.code))].sort();
+ const pending=rows.filter(r=>!r.t.confirmed);
+ const doneCount=rows.length-pending.length;
+ if(!pending.length)return `<div class="card"><div class="banner ok">&#10003; All ${rows.length} transaction(s) reviewed and confirmed — nothing left in the queue.</div></div>`;
+ const cats=[...new Set(pending.map(r=>r.t.code))].sort();
  if(reviewCat!=="all"&&!cats.includes(reviewCat))reviewCat="all";
- const shown=reviewCat==="all"?rows:rows.filter(r=>r.t.code===reviewCat);
+ const shown=reviewCat==="all"?pending:pending.filter(r=>r.t.code===reviewCat);
  const body=shown.map(({st,t})=>{
   const conf=Math.round(t.conf*100);const col=conf>=80?"#2ea36b":conf>=60?"#e0993a":"#e0554e";
   const a=ACCOUNTS[t.code]||{stmt:'PL',name:t.code};
@@ -457,12 +460,12 @@ function viewReview(c){
    <td>${t.confirmed?'<span class="pill green">Confirmed</span>':`<button class="btn sm sec" data-confirm="${st}:${t.line}">Confirm</button>`}</td>
   </tr>`;
  }).join("")||'<tr><td colspan=7 class="mini">No transactions in this category.</td></tr>';
- const low=rows.filter(r=>r.t.conf<0.6).length;
- const filter=`<select id="reviewCat"><option value="all" ${reviewCat==="all"?"selected":""}>All categories (${rows.length})</option>${cats.map(code=>`<option value="${code}" ${code===reviewCat?"selected":""}>${(ACCOUNTS[code]?ACCOUNTS[code].name:code)} (${rows.filter(r=>r.t.code===code).length})</option>`).join("")}</select>`;
+ const low=pending.filter(r=>r.t.conf<0.6).length;
+ const filter=`<select id="reviewCat"><option value="all" ${reviewCat==="all"?"selected":""}>All categories (${pending.length})</option>${cats.map(code=>`<option value="${code}" ${code===reviewCat?"selected":""}>${(ACCOUNTS[code]?ACCOUNTS[code].name:code)} (${pending.filter(r=>r.t.code===code).length})</option>`).join("")}</select>`;
  return `<div class="card">
   <div class="row" style="align-items:center;gap:10px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--line)"><div class="mini" style="font-weight:700">Show category:</div> ${filter}${reviewCat!=="all"?` <span class="mini">${shown.length} shown</span>`:''}</div>
   <h2>Review queue — ${c.name}</h2>
-  <div class="desc">Lowest-confidence items are at the top. Change any category from the dropdown; the books rebalance automatically.</div>
+  <div class="desc">Showing the <b>${pending.length}</b> item(s) still to review${doneCount?` — ${doneCount} already confirmed and hidden`:''}. Confirming an item (or changing its category) removes it from this list. Lowest-confidence are at the top.</div>
   ${low?`<div class="banner info">${low} transaction(s) are low-confidence and worth checking.</div>`:`<div class="banner ok">Nothing low-confidence — looking clean.</div>`}
   <table><thead><tr><th>Date</th><th>Description</th><th class="num">Amount</th><th>Account</th><th>Goes to</th><th>Confidence</th><th></th></tr></thead>
    <tbody>${body}</tbody></table>
