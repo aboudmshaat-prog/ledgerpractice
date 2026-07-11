@@ -18,6 +18,8 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const os = require("os");
+const { execFile } = require("child_process");
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
@@ -136,6 +138,32 @@ function serveStatic(res, urlPath) {
   });
 }
 
+// --- Lloyds statement parser (from `pdftotext -layout` output) ---
+function parseLloyds(text) {
+  const lines = text.split(/\r?\n/).map(l => l.replace(/\s+/g, " ").trim());
+  const bals = [...text.matchAll(/Balance on \d{2} [A-Za-z]+ \d{4}[^£]*£([\d,]+\.\d{2})/g)]
+    .map(m => Math.round(parseFloat(m[1].replace(/,/g, "")) * 100));
+  const opening = bals.length ? bals[0] : 0;
+  const closing = bals.length > 1 ? bals[1] : null;
+  const dateRe = /^(\d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{2})\b/;
+  const numRe = /-?\d{1,3}(?:,\d{3})*\.\d{2}/g;
+  let pendingDesc = "", prev = opening; const rows = [];
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (l === "Description") { for (let j = i + 1; j < lines.length; j++) { if (lines[j]) { pendingDesc = lines[j]; break; } } continue; }
+    const dm = l.match(dateRe);
+    if (dm) {
+      const nums = l.match(numRe);
+      if (nums && nums.length >= 2) {
+        const bal = Math.round(parseFloat(nums[nums.length - 1].replace(/,/g, "")) * 100);
+        rows.push({ date: dm[1], description: pendingDesc || "Transaction", amount: (bal - prev) / 100, balance: bal / 100 });
+        prev = bal; pendingDesc = "";
+      }
+    }
+  }
+  return { opening: opening / 100, closing: closing == null ? null : closing / 100, computed: prev / 100, count: rows.length, rows };
+}
+
 // --- server ---
 const server = http.createServer((req, res) => {
   const url = req.url.split("?")[0];
@@ -172,6 +200,26 @@ const server = http.createServer((req, res) => {
       });
     }
     return json(res, 405, { error: "Method not allowed" });
+  }
+
+  // PDF statement parsing (auth required) — uses system `pdftotext`
+  if (url === "/api/parse-pdf") {
+    if (!isAuthed(req)) return json(res, 401, { error: "Not authenticated" });
+    if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
+    const chunks = []; let size = 0, tooBig = false;
+    req.on("data", c => { size += c.length; if (size > MAX_BODY) { tooBig = true; req.destroy(); } else chunks.push(c); });
+    req.on("end", () => {
+      if (tooBig) return json(res, 413, { error: "File too large" });
+      const tmp = path.join(os.tmpdir(), "lp-" + crypto.randomBytes(6).toString("hex") + ".pdf");
+      try { fs.writeFileSync(tmp, Buffer.concat(chunks)); } catch (e) { return json(res, 500, { error: "Could not save upload" }); }
+      execFile("pdftotext", ["-layout", tmp, "-"], { maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
+        fs.unlink(tmp, () => {});
+        if (err) return json(res, 500, { error: "pdftotext failed — is poppler-utils installed on the server?" });
+        try { return json(res, 200, parseLloyds(stdout)); }
+        catch (e) { return json(res, 500, { error: "Could not parse the statement" }); }
+      });
+    });
+    return;
   }
 
   // health check

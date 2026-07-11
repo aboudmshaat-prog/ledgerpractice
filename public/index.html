@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LedgerPractice — Working App</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 :root{--navy:#1F3A5F;--blue:#2E75B6;--bg:#eef2f7;--card:#fff;--line:#e2e8f0;--grey:#5b6a82;--muted:#8a97ab;
 --green:#2ea36b;--red:#e0554e;--amber:#e0993a;--shadow:0 1px 3px rgba(20,40,80,.06),0 6px 22px rgba(20,40,80,.06);}
@@ -496,58 +495,24 @@ function bindView(){
  if(pc)pc.onclick=()=>window.print();
 }
 function val(id){const e=document.getElementById(id);return e?e.value.trim():"";}
-/* ---- PDF statement import (beta, runs in the browser via pdf.js) ---- */
-async function extractPdfLines(file){
- pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
- const buf=await file.arrayBuffer();
- const pdf=await pdfjsLib.getDocument({data:buf}).promise;
- const lines=[];
- for(let p=1;p<=pdf.numPages;p++){
-  const page=await pdf.getPage(p);
-  const tc=await page.getTextContent();
-  const rows={};
-  tc.items.forEach(it=>{const y=Math.round(it.transform[5]);(rows[y]=rows[y]||[]).push({x:it.transform[4],s:it.str});});
-  Object.keys(rows).map(Number).sort((a,b)=>b-a).forEach(y=>{
-   const line=rows[y].sort((a,b)=>a.x-b.x).map(o=>o.s).join(" ").replace(/\s+/g," ").trim();
-   if(line)lines.push(line);});
- }
- return lines;
-}
-function parseMoneyToken(t){
- const neg=/^\(.*\)$/.test(t)||/-\s*$/.test(t)||/^\s*-/.test(t);
- const n=t.replace(/[()£,\s-]/g,"");
- if(!/^\d+(\.\d{2})?$/.test(n))return null;
- const p=Math.round(parseFloat(n)*100);
- return neg?-p:p;
-}
-function pdfLinesToRows(lines,openingPence){
- const dateRe=/(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4})|(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{2,4})/i;
- const numRe=/\(?-?£?\s?\d{1,3}(?:,\d{3})*\.\d{2}\)?-?/g;
- let prev=openingPence;const rows=["Date,Description,Amount,Balance"];let count=0;
- lines.forEach(l=>{
-  const dm=l.match(dateRe);if(!dm)return;
-  const nums=l.match(numRe);if(!nums||!nums.length)return;
-  const bal=parseMoneyToken(nums[nums.length-1]);if(bal===null)return;
-  const amt=bal-prev;
-  const desc=l.replace(dateRe,"").replace(numRe,"").replace(/\s+/g," ").trim().replace(/,/g,";")||"Transaction";
-  rows.push([dm[0],desc,(amt/100).toFixed(2),(bal/100).toFixed(2)].join(","));
-  prev=bal;count++;
- });
- return {csv:rows.join("\n"),count,lastBalancePence:prev};
-}
+/* ---- PDF statement import (server-side via pdftotext; tuned for Lloyds) ---- */
 async function handlePdf(file){
  const note=document.getElementById("pdfNote");if(!file)return;
- if(typeof pdfjsLib==="undefined"){note.textContent="The PDF reader didn’t load — check your internet connection, then try again.";return;}
- note.textContent="Reading the PDF…";
+ note.textContent="Reading the statement…";
  try{
-  const openingPence=toPence(val("uOpen")||"0");
-  const lines=await extractPdfLines(file);
-  const {csv,count,lastBalancePence}=pdfLinesToRows(lines,openingPence);
-  if(!count){note.innerHTML="Couldn’t automatically find transaction rows in this PDF — its layout may be unusual. You can still paste the rows as CSV below. (If you send me a sample, I can tune the reader to your bank’s format.)";return;}
+  const buf=await file.arrayBuffer();
+  const r=await fetch("/api/parse-pdf",{method:"POST",headers:{"Content-Type":"application/pdf"},body:buf});
+  if(!r.ok){const e=await r.json().catch(()=>({}));note.textContent="Could not read the PDF: "+(e.error||("error "+r.status));return;}
+  const d=await r.json();
+  if(!d.count){note.innerHTML="No transactions found. This may not be a Lloyds statement, or its layout differs. Paste the rows as CSV, or send me a sample and I will add support for that bank.";return;}
+  const csv=["Date,Description,Amount,Balance"].concat(d.rows.map(x=>[x.date,String(x.description).replace(/,/g,";"),x.amount.toFixed(2),x.balance.toFixed(2)].join(","))).join("\n");
   document.getElementById("uCsv").value=csv;
+  if(d.opening!=null)document.getElementById("uOpen").value=d.opening.toFixed(2);
+  if(d.closing!=null)document.getElementById("uClose").value=d.closing.toFixed(2);
   if(/^\d{4}-\d{2}_.+\.pdf$/i.test(file.name))document.getElementById("uName").value=file.name;
-  note.innerHTML=`Extracted <b>${count}</b> rows (the last balance read was <b>${money(lastBalancePence)}</b>). <b>Please check every row against your statement</b>, then set the true closing balance and press Check &amp; import — the balance check will flag mis-reads.`;
- }catch(e){note.textContent="Couldn’t read that PDF ("+(e&&e.message||e)+"). Try another file or paste the rows as CSV.";}
+  const ok=d.closing!=null&&Math.abs(d.computed-d.closing)<0.005;
+  note.innerHTML=`Read <b>${d.count}</b> transactions. Opening <b>${money(Math.round((d.opening||0)*100))}</b>, closing <b>${money(Math.round((d.closing||0)*100))}</b>. ${ok?"Balances reconcile &#10003; — review the rows below, then Check &amp; import.":"<b>Balances do not fully reconcile — please check the rows against your statement.</b>"}`;
+ }catch(e){note.textContent="Could not read that PDF ("+(e&&e.message||e)+").";}
 }
 function doImport(c){
  const name=val("uName"),op=toPence(val("uOpen")),cl=toPence(val("uClose"));
