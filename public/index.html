@@ -90,6 +90,7 @@ h3.sec{font-size:13px;color:var(--navy);margin:6px 0 8px;text-transform:uppercas
       <a data-v="upload"><span class="ico">📥</span><span class="lbl">Upload statement</span></a>
       <a data-v="review"><span class="ico">✅</span><span class="lbl">Review queue</span></a>
       <a data-v="reports"><span class="ico">📊</span><span class="lbl">Reports</span></a>
+      <a data-v="tb"><span class="ico">⚖️</span><span class="lbl">Trial balance</span></a>
       <a data-v="mgmt"><span class="ico">📝</span><span class="lbl">Management accounts</span></a>
       <a data-v="chart"><span class="ico">📒</span><span class="lbl">Chart of accounts</span></a>
     </nav>
@@ -241,11 +242,13 @@ let mgmtMonth=null;
 let pdfBank="";
 let reviewCat="all";
 let chartFilter="all";
+let tbAccount=null;
 const TITLES={clients:["Clients","Add the businesses whose books you keep."],
  opening:["Opening balances","Set the client's starting position. Debits must equal credits."],
  upload:["Upload statement","Import a bank statement, with safety checks before anything posts."],
  review:["Review queue","Check and correct how each transaction was categorised."],
  reports:["Reports","Live Profit & Loss, Balance Sheet and key figures."],
+ tb:["Trial balance","Every account's balance, with drill-down to transactions."],
  mgmt:["Management accounts","Monthly variance analysis and auto-drafted commentary."],
  chart:["Chart of accounts","The nominal accounts used to categorise transactions."]};
 
@@ -315,6 +318,7 @@ function render(){
  if(view==="upload")el.innerHTML=viewUpload(c);
  if(view==="review")el.innerHTML=viewReview(c);
  if(view==="reports")el.innerHTML=viewReports(c);
+ if(view==="tb")el.innerHTML=viewTrialBalance(c);
  if(view==="mgmt")el.innerHTML=viewMgmt(c);
  bindView();
 }
@@ -553,6 +557,34 @@ function viewReports(c){
   <div class="card"><div class="mini">Figures are built from the reconciled statements you upload and the categories you set. Have your accountant review the accounting treatment before finalising.</div></div>`;
 }
 
+/* ============ TRIAL BALANCE ============ */
+function accountEntries(c,code){
+ const out=[];
+ (db.opening[c.id]||[]).forEach(r=>{if(r.code===code){const v=toPence(r.debit)-toPence(r.credit);if(v)out.push({date:"Opening",desc:"Opening balance",amt:v});}});
+ (db.statements[c.id]||[]).forEach(st=>{if(!st.reconciled)return;st.txns.forEach(t=>{buildJournal(t,t.code,c).forEach(e=>{if(e.code===code)out.push({date:t.date,desc:t.description,amt:e.amountPence});});});});
+ return out;
+}
+function viewTrialBalance(c){
+ const bal=ledger(c);
+ const codes=Object.keys(bal).filter(code=>bal[code]!==0&&ACCOUNTS[code]).sort();
+ let td=0,tc=0;
+ const rows=codes.map(code=>{const v=bal[code],dr=v>0?v:0,cr=v<0?-v:0;td+=dr;tc+=cr;
+  return `<tr style="cursor:pointer" data-tb="${code}"><td class="mini">${code}</td><td>${ACCOUNTS[code].name}</td><td class="num">${dr?money(dr):''}</td><td class="num">${cr?money(cr):''}</td></tr>`;}).join("")||'<tr><td colspan=4 class="mini">No posted entries yet.</td></tr>';
+ let drill='';
+ if(tbAccount&&ACCOUNTS[tbAccount]){
+  const es=accountEntries(c,tbAccount),b=bal[tbAccount]||0;
+  drill=`<div class="card"><div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">${tbAccount} · ${ACCOUNTS[tbAccount].name}</h2><button class="btn sm ghost" id="tbClose">Close</button></div>
+   <table style="margin-top:10px"><thead><tr><th>Date</th><th>Description</th><th class="num">Debit</th><th class="num">Credit</th></tr></thead><tbody>
+   ${es.map(e=>`<tr><td class="mini">${e.date}</td><td>${e.desc}</td><td class="num">${e.amt>0?money(e.amt):''}</td><td class="num">${e.amt<0?money(-e.amt):''}</td></tr>`).join("")||'<tr><td colspan=4 class="mini">No entries.</td></tr>'}
+   <tr class="totrow"><td colspan=2>Balance</td><td class="num">${b>0?money(b):''}</td><td class="num">${b<0?money(-b):''}</td></tr></tbody></table></div>`;
+ }
+ return `<div class="card"><h2>Trial Balance — ${c.name}</h2><div class="desc">Every account's net balance from posted entries. Debits must equal credits. Click a row to drill into its transactions.</div>
+  <table><thead><tr><th>Code</th><th>Account</th><th class="num">Debit</th><th class="num">Credit</th></tr></thead><tbody>${rows}
+  <tr class="totrow"><td colspan=2>Totals</td><td class="num">${money(td)}</td><td class="num">${money(tc)}</td></tr></tbody></table>
+  <div class="banner ${td===tc?'ok':'err'}" style="margin-top:10px">${td===tc?'&#10003; In balance — debits equal credits':'&#9888; Out of balance by '+money(Math.abs(td-tc))}</div></div>
+  ${drill}`;
+}
+
 /* ============ MANAGEMENT ACCOUNTS ============ */
 const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
 function monthName(ym){if(!ym||ym.indexOf("-")<0)return ym||"";const[y,m]=ym.split("-");return (MONTHS[parseInt(m,10)-1]||"")+" "+y;}
@@ -655,6 +687,10 @@ function bindView(){
  if(ca)ca.onclick=()=>{(db.statements[c.id]||[]).forEach(st=>st.txns.forEach(t=>t.confirmed=true));save();render();};
  const rf=document.getElementById("reviewCat");
  if(rf)rf.onchange=()=>{reviewCat=rf.value;render();};
+ // trial balance drill-down
+ document.querySelectorAll("[data-tb]").forEach(r=>r.onclick=()=>{tbAccount=r.dataset.tb;render();});
+ const tbc=document.getElementById("tbClose");
+ if(tbc)tbc.onclick=()=>{tbAccount=null;render();};
 
  // management accounts
  const mp=document.getElementById("mgmtPick");
