@@ -92,6 +92,7 @@ h3.sec{font-size:13px;color:var(--navy);margin:6px 0 8px;text-transform:uppercas
       <a data-v="reports"><span class="ico">📊</span><span class="lbl">Reports</span></a>
       <a data-v="tb"><span class="ico">⚖️</span><span class="lbl">Trial balance</span></a>
       <a data-v="journals"><span class="ico">✍️</span><span class="lbl">Journals</span></a>
+      <a data-v="budget"><span class="ico">🎯</span><span class="lbl">Budget &amp; forecast</span></a>
       <a data-v="mgmt"><span class="ico">📝</span><span class="lbl">Management accounts</span></a>
       <a data-v="chart"><span class="ico">📒</span><span class="lbl">Chart of accounts</span></a>
     </nav>
@@ -254,6 +255,7 @@ const TITLES={clients:["Clients","Add the businesses whose books you keep."],
  reports:["Reports","Live Profit & Loss, Balance Sheet and key figures."],
  tb:["Trial balance","Every account's balance, with drill-down to transactions."],
  journals:["Journals","Manual adjustments — accruals, prepayments, depreciation, corrections."],
+ budget:["Budget & forecast","Budget vs actual and a cash-flow projection."],
  mgmt:["Management accounts","Monthly variance analysis and auto-drafted commentary."],
  chart:["Chart of accounts","The nominal accounts used to categorise transactions."]};
 
@@ -325,6 +327,7 @@ function render(){
  if(view==="reports")el.innerHTML=viewReports(c);
  if(view==="tb")el.innerHTML=viewTrialBalance(c);
  if(view==="journals")el.innerHTML=viewJournals(c);
+ if(view==="budget")el.innerHTML=viewBudget(c);
  if(view==="mgmt")el.innerHTML=viewMgmt(c);
  bindView();
 }
@@ -601,6 +604,41 @@ function viewTrialBalance(c){
   ${drill}`;
 }
 
+/* ============ BUDGET & FORECAST ============ */
+function viewBudget(c){
+ const bal=ledger(c);
+ const sts=(db.statements[c.id]||[]).filter(s=>s.reconciled);
+ const nMonths=sts.length||1;
+ const frac=Math.min(1,nMonths/12);
+ const bud=(db.budget&&db.budget[c.id])||{};
+ const codes=Object.keys(ACCOUNTS).filter(code=>ACCOUNTS[code].stmt==="PL").sort();
+ const rows=codes.map(code=>{const a=ACCOUNTS[code];const actual=a.type==="income"?-(bal[code]||0):(bal[code]||0);const annual=toPence(bud[code]||"");return {code,a,actual,annual,expected:Math.round(annual*frac)};}).filter(r=>r.actual||r.annual);
+ const body=rows.map(r=>{const varc=r.actual-r.expected;const over=r.a.type==="income"?varc<0:varc>0;
+   return `<tr><td class="mini">${r.code}</td><td>${r.a.name}</td>
+    <td class="num"><input class="num" style="width:110px" data-bud="${r.code}" value="${bud[r.code]||''}" placeholder="0.00"></td>
+    <td class="num">${r.annual?money(r.expected):'—'}</td><td class="num">${money(r.actual)}</td>
+    <td class="num" style="color:${r.annual?(over?'#b23a32':'#1f7d51'):'#8a97ab'}">${r.annual?money(varc):'—'}</td></tr>`;}).join("")||'<tr><td colspan=6 class="mini">No P&L activity or budgets yet.</td></tr>';
+ const cash=bal["1200"]||0;
+ const totalMove=sts.reduce((a,s)=>a+(s.closingPence-s.openingPence),0);
+ const avgMonthly=nMonths?Math.round(totalMove/nMonths):0;
+ const proj=[{label:"Now",val:cash}];for(let i=1;i<=6;i++)proj.push({label:"+"+i+"m",val:cash+avgMonthly*i});
+ const maxV=Math.max(1,...proj.map(p=>Math.abs(p.val)));
+ const bars=proj.map(p=>{const w=Math.round(Math.abs(p.val)/maxV*100),pos=p.val>=0;return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><div class="mini" style="width:56px;flex:none">${p.label}</div><div style="flex:1;background:#eef1f6;border-radius:6px;height:16px"><div style="height:100%;width:${w}%;background:${pos?'#2ea36b':'#e0554e'};border-radius:6px"></div></div><div class="num" style="width:100px;flex:none;color:${pos?'#1f7d51':'#b23a32'}">${money(p.val)}</div></div>`;}).join("");
+ const runway=avgMonthly<0?Math.floor(cash/-avgMonthly):null;
+ return `<div class="kpis">
+   <div class="kpi"><div class="l">Cash at bank</div><div class="v">${money(cash)}</div></div>
+   <div class="kpi"><div class="l">Avg monthly change</div><div class="v" style="color:${avgMonthly>=0?'#1f7d51':'#b23a32'}">${money(avgMonthly)}</div></div>
+   <div class="kpi"><div class="l">Cash runway</div><div class="v">${avgMonthly>=0?'—':runway+' mo'}</div></div>
+   <div class="kpi"><div class="l">Months of data</div><div class="v">${nMonths}</div></div>
+  </div>
+  <div class="split">
+   <div class="card"><h2>Cash-flow forecast</h2><div class="desc">Projected bank balance from the average monthly change (${money(avgMonthly)}/mo).</div>${bars}</div>
+   <div class="card"><h2>How it's calculated</h2><div class="mini">Projection = current cash + average monthly bank movement × months ahead. It assumes recent trends continue and ignores one-off or seasonal items — treat it as a guide, not a guarantee.</div></div>
+  </div>
+  <div class="card"><h2>Budget vs actual</h2><div class="desc">Enter an annual budget per account. "Expected" is pro-rated for the ${nMonths}-month period so far; red variance = worse than budget.</div>
+   <table><thead><tr><th>Code</th><th>Account</th><th class="num">Annual budget (£)</th><th class="num">Expected</th><th class="num">Actual</th><th class="num">Variance</th></tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
 /* ============ MANUAL JOURNALS ============ */
 function clientJournals(c){return (db.journals&&db.journals[c.id])||[];}
 function viewJournals(c){
@@ -760,6 +798,8 @@ function bindView(){
   db.journals[c.id].push({id:uid(),date:dj.date||new Date().toISOString().slice(0,10),memo:dj.memo||"",lines});
   jrnlDraft=null;save();render();};
  document.querySelectorAll("[data-deljrnl]").forEach(b=>b.onclick=()=>{if(db.journals&&db.journals[c.id]){db.journals[c.id]=db.journals[c.id].filter(j=>j.id!==b.dataset.deljrnl);save();render();}});
+ // budget
+ document.querySelectorAll("[data-bud]").forEach(i=>i.onchange=()=>{db.budget=db.budget||{};db.budget[c.id]=db.budget[c.id]||{};db.budget[c.id][i.dataset.bud]=i.value;save();render();});
 
  // management accounts
  const mp=document.getElementById("mgmtPick");
