@@ -128,6 +128,26 @@ let ACCOUNTS={
 };
 const PL_CODES=Object.keys(ACCOUNTS).filter(c=>ACCOUNTS[c].stmt==="PL");
 const BS_CODES=Object.keys(ACCOUNTS).filter(c=>ACCOUNTS[c].stmt==="BS");
+// Standard chart-of-accounts templates (UK)
+const SAGE_CHART={
+"0010":{name:"Freehold Property",type:"asset",stmt:"BS"},"0020":{name:"Plant & Machinery",type:"asset",stmt:"BS"},"0030":{name:"Office Equipment",type:"asset",stmt:"BS"},"0040":{name:"Furniture & Fixtures",type:"asset",stmt:"BS"},"0051":{name:"Motor Vehicles",type:"asset",stmt:"BS"},
+"1100":{name:"Debtors Control Account",type:"asset",stmt:"BS"},"1230":{name:"Petty Cash",type:"asset",stmt:"BS"},
+"2101":{name:"Creditors Control Account",type:"liability",stmt:"BS"},"2201":{name:"Purchase Tax Control (VAT)",type:"liability",stmt:"BS"},"2210":{name:"P.A.Y.E.",type:"liability",stmt:"BS"},"2211":{name:"National Insurance",type:"liability",stmt:"BS"},"2300":{name:"Loans",type:"liability",stmt:"BS"},"2320":{name:"Corporation Tax",type:"liability",stmt:"BS"},
+"3200":{name:"Profit & Loss Account",type:"equity",stmt:"BS"},
+"4001":{name:"Sales - Services",type:"income",stmt:"PL",vatable:true},"4905":{name:"Distribution & Carriage",type:"income",stmt:"PL",vatable:true},
+"5000":{name:"Materials Purchased",type:"expense",stmt:"PL",vatable:true},"6201":{name:"Advertising",type:"expense",stmt:"PL",vatable:true},
+"7003":{name:"Staff Salaries",type:"expense",stmt:"PL"},"7006":{name:"Employers N.I.",type:"expense",stmt:"PL"},"7007":{name:"Employers Pension",type:"expense",stmt:"PL"},
+"7103":{name:"General Rates",type:"expense",stmt:"PL"},"7104":{name:"Premises Insurance",type:"expense",stmt:"PL"},"7202":{name:"Electricity",type:"expense",stmt:"PL",vatable:true},"7300":{name:"Fuel & Oil",type:"expense",stmt:"PL",vatable:true},"7301":{name:"Repairs & Servicing",type:"expense",stmt:"PL",vatable:true},
+"7402":{name:"Hotels",type:"expense",stmt:"PL",vatable:true},"7406":{name:"Entertainment",type:"expense",stmt:"PL"},"7501":{name:"Postage & Carriage",type:"expense",stmt:"PL",vatable:true},"7502":{name:"Telephone",type:"expense",stmt:"PL",vatable:true},"7504":{name:"Office Stationery",type:"expense",stmt:"PL",vatable:true},
+"7601":{name:"Audit & Accountancy Fees",type:"expense",stmt:"PL",vatable:true},"7602":{name:"Consultancy Fees",type:"expense",stmt:"PL",vatable:true},"7800":{name:"Repairs & Renewals",type:"expense",stmt:"PL",vatable:true},"7900":{name:"Bank Interest Paid",type:"expense",stmt:"PL"},"8000":{name:"Depreciation",type:"expense",stmt:"PL"},"8100":{name:"Bad Debt Write Off",type:"expense",stmt:"PL"},"8201":{name:"Subscriptions",type:"expense",stmt:"PL",vatable:true},"8204":{name:"Insurance",type:"expense",stmt:"PL"}
+};
+const XERO_CHART={
+"200":{name:"Sales",type:"income",stmt:"PL",vatable:true},"260":{name:"Other Revenue",type:"income",stmt:"PL",vatable:true},"270":{name:"Interest Income",type:"income",stmt:"PL"},
+"400":{name:"Advertising",type:"expense",stmt:"PL",vatable:true},"404":{name:"Bank Fees",type:"expense",stmt:"PL"},"408":{name:"Cleaning",type:"expense",stmt:"PL",vatable:true},"412":{name:"Consulting & Accounting",type:"expense",stmt:"PL",vatable:true},"416":{name:"Depreciation",type:"expense",stmt:"PL"},"420":{name:"Entertainment",type:"expense",stmt:"PL"},"425":{name:"Freight & Courier",type:"expense",stmt:"PL",vatable:true},"429":{name:"General Expenses",type:"expense",stmt:"PL",vatable:true},"433":{name:"Insurance",type:"expense",stmt:"PL"},"437":{name:"Interest Expense",type:"expense",stmt:"PL"},"441":{name:"Legal Expenses",type:"expense",stmt:"PL",vatable:true},"445":{name:"Light, Power, Heating",type:"expense",stmt:"PL",vatable:true},"449":{name:"Motor Vehicle Expenses",type:"expense",stmt:"PL",vatable:true},"453":{name:"Office Expenses",type:"expense",stmt:"PL",vatable:true},"461":{name:"Printing & Stationery",type:"expense",stmt:"PL",vatable:true},"469":{name:"Rent",type:"expense",stmt:"PL",vatable:true},"473":{name:"Repairs & Maintenance",type:"expense",stmt:"PL",vatable:true},"477":{name:"Wages & Salaries",type:"expense",stmt:"PL"},"478":{name:"Pensions",type:"expense",stmt:"PL"},"485":{name:"Subscriptions",type:"expense",stmt:"PL",vatable:true},"489":{name:"Telephone & Internet",type:"expense",stmt:"PL",vatable:true},"493":{name:"Travel - National",type:"expense",stmt:"PL",vatable:true},"494":{name:"Travel - International",type:"expense",stmt:"PL"},
+"610":{name:"Accounts Receivable",type:"asset",stmt:"BS"},"620":{name:"Prepayments",type:"asset",stmt:"BS"},"710":{name:"Office Equipment",type:"asset",stmt:"BS"},"720":{name:"Computer Equipment",type:"asset",stmt:"BS"},"740":{name:"Motor Vehicles",type:"asset",stmt:"BS"},
+"800":{name:"Accounts Payable",type:"liability",stmt:"BS"},"820":{name:"VAT",type:"liability",stmt:"BS"},"825":{name:"PAYE Payable",type:"liability",stmt:"BS"},"826":{name:"NIC Payable",type:"liability",stmt:"BS"},"830":{name:"Provision for Corporation Tax",type:"liability",stmt:"BS"},"880":{name:"Owner Drawings",type:"liability",stmt:"BS"},
+"960":{name:"Retained Earnings",type:"equity",stmt:"BS"},"970":{name:"Owner Share Capital",type:"equity",stmt:"BS"}
+};
 
 function parseCSV(text){
  const rows=text.trim().split(/\r?\n/).map(r=>r.split(","));
@@ -213,6 +233,7 @@ function clientPick(){
 
 function syncAccounts(){ if(db.accounts&&Object.keys(db.accounts).length){ACCOUNTS=db.accounts;} else {db.accounts=ACCOUNTS;} }
 function persistAccounts(){db.accounts=ACCOUNTS;save();}
+function mergeChart(tpl,label){let n=0;for(const code in tpl){if(!ACCOUNTS[code]){ACCOUNTS[code]=Object.assign({},tpl[code]);n++;}}persistAccounts();render();alert("Added "+n+" new "+label+" accounts. Existing codes were kept.");}
 function viewChart(){
  const codes=Object.keys(ACCOUNTS).sort().filter(code=>{const a=ACCOUNTS[code];if(chartFilter==="all")return true;if(chartFilter==="PL"||chartFilter==="BS")return a.stmt===chartFilter;return a.type===chartFilter;});
  const TYPES=["asset","liability","equity","income","expense"];
@@ -237,7 +258,10 @@ function viewChart(){
     <div class="field"><label>Statement</label><select id="acStmt"><option>PL</option><option>BS</option></select></div>
     <div class="field"><label>VATable</label><label style="padding:10px 0;display:block"><input type="checkbox" id="acVat"></label></div>
     <button class="btn" id="acAdd">Add account</button>
-   </div></div>`;
+   </div></div>
+  <div class="card"><h2>Load a standard chart (UK)</h2>
+   <div class="desc">Adds the standard nominal codes used by these packages; your existing codes are kept. Auto-categorisation stays tuned to the Sage-style codes — Xero codes are added for manual selection.</div>
+   <div class="row"><button class="btn sec" id="loadSage">Load Sage 50 standard</button> <button class="btn sec" id="loadXero">Load Xero standard</button></div></div>`;
 }
 function render(){
  syncAccounts();
@@ -572,6 +596,8 @@ function bindView(){
  // chart of accounts
  const cf=document.getElementById("chartFilter");
  if(cf)cf.onchange=()=>{chartFilter=cf.value;render();};
+ const ls=document.getElementById("loadSage");if(ls)ls.onclick=()=>mergeChart(SAGE_CHART,"Sage 50");
+ const lx=document.getElementById("loadXero");if(lx)lx.onclick=()=>mergeChart(XERO_CHART,"Xero");
  document.querySelectorAll("[data-an]").forEach(i=>i.onchange=()=>{ACCOUNTS[i.dataset.an].name=i.value;persistAccounts();});
  document.querySelectorAll("[data-at]").forEach(s=>s.onchange=()=>{ACCOUNTS[s.dataset.at].type=s.value;persistAccounts();});
  document.querySelectorAll("[data-as]").forEach(s=>s.onchange=()=>{ACCOUNTS[s.dataset.as].stmt=s.value;persistAccounts();});
