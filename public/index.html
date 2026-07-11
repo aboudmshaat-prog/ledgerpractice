@@ -503,6 +503,32 @@ function ledger(c){
  const bal={};entries.forEach(e=>bal[e.code]=(bal[e.code]||0)+e.amountPence);
  return bal;
 }
+/* ---- Report export (CSV + print-to-PDF, dependency-free) ---- */
+function csvCell(v){v=String(v==null?"":v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function downloadCSV(filename,rows){const csv=rows.map(r=>r.map(csvCell).join(",")).join("\n");const blob=new Blob([csv],{type:"text/csv"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);}
+function printHTML(title,inner){const w=window.open("","_blank");if(!w)return alert("Please allow pop-ups so the printable report can open.");
+ w.document.write('<html><head><title>'+title+'</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#1a2233;margin:32px}h1{color:#1F3A5F;font-size:22px;margin:0 0 2px}h2{color:#2E75B6;font-size:15px;margin:18px 0 4px}.muted{color:#666;font-size:12px}table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:6px 8px;border-bottom:1px solid #e5e9f0}.num{text-align:right}.tot td{font-weight:bold;border-top:2px solid #999}</style></head><body>'+inner+'<scr'+'ipt>window.onload=function(){setTimeout(function(){window.print();},250);}</scr'+'ipt></body></html>');w.document.close();}
+function slug(s){return (s||"client").replace(/[^A-Za-z0-9]/g,"_");}
+function reportPeriod(c){const s=(db.statements[c.id]||[]).filter(x=>x.reconciled).map(x=>x.ym).filter(Boolean).sort();return s.length?monthName(s[0])+" to "+monthName(s[s.length-1]):"—";}
+function reportEnd(c){const s=(db.statements[c.id]||[]).filter(x=>x.reconciled).map(x=>x.ym).filter(Boolean).sort();return s.length?monthName(s[s.length-1]):"—";}
+function plbsData(c){const bal=ledger(c);let income=0,expense=0,assets=0,liab=0,equity=0;const inc=[],exp=[],as=[],li=[];
+ for(const code in bal){const a=ACCOUNTS[code];if(!a)continue;const v=bal[code];
+  if(a.stmt==="PL"){if(a.type==="income"){income+=-v;inc.push([a.name,-v]);}else{expense+=v;exp.push([a.name,v]);}}
+  else{if(a.type==="asset"){assets+=v;as.push([a.name,v]);}else if(a.type==="equity"){equity+=-v;}else{liab+=-v;li.push([a.name,-v]);}}}
+ return {income,expense,net:income-expense,assets,liab,equity,inc,exp,as,li};}
+function exportReports(c,fmt){const d=plbsData(c),p=reportPeriod(c);
+ if(fmt==="csv"){const r=[["Profit & Loss — "+c.name],["Period",p],[],["Income"],...d.inc.map(l=>[l[0],(l[1]/100).toFixed(2)]),["Total income",(d.income/100).toFixed(2)],[],["Expenses"],...d.exp.map(l=>[l[0],(l[1]/100).toFixed(2)]),["Total expenses",(d.expense/100).toFixed(2)],["Net profit",(d.net/100).toFixed(2)],[],["Balance Sheet — as at",reportEnd(c)],["Assets"],...d.as.map(l=>[l[0],(l[1]/100).toFixed(2)]),["Total assets",(d.assets/100).toFixed(2)],["Liabilities"],...d.li.map(l=>[l[0],(l[1]/100).toFixed(2)]),["Retained profit",(d.net/100).toFixed(2)],["Total liabilities & equity",((d.liab+d.equity+d.net)/100).toFixed(2)]];downloadCSV("Reports_"+slug(c.name)+".csv",r);}
+ else{const html='<h1>Profit &amp; Loss</h1><div class="muted">'+c.name+' · '+p+'</div>'
+   +'<h2>Income</h2><table>'+d.inc.map(l=>'<tr><td>'+l[0]+'</td><td class="num">'+money(l[1])+'</td></tr>').join('')+'<tr class="tot"><td>Total income</td><td class="num">'+money(d.income)+'</td></tr></table>'
+   +'<h2>Expenses</h2><table>'+d.exp.map(l=>'<tr><td>'+l[0]+'</td><td class="num">'+money(l[1])+'</td></tr>').join('')+'<tr class="tot"><td>Total expenses</td><td class="num">'+money(d.expense)+'</td></tr></table>'
+   +'<table><tr class="tot"><td>Net profit</td><td class="num">'+money(d.net)+'</td></tr></table>'
+   +'<h1 style="margin-top:26px">Balance Sheet</h1><div class="muted">'+c.name+' · as at '+reportEnd(c)+'</div>'
+   +'<h2>Assets</h2><table>'+d.as.map(l=>'<tr><td>'+l[0]+'</td><td class="num">'+money(l[1])+'</td></tr>').join('')+'<tr class="tot"><td>Total assets</td><td class="num">'+money(d.assets)+'</td></tr></table>'
+   +'<h2>Liabilities &amp; Equity</h2><table>'+d.li.map(l=>'<tr><td>'+l[0]+'</td><td class="num">'+money(l[1])+'</td></tr>').join('')+'<tr><td>Retained profit</td><td class="num">'+money(d.net)+'</td></tr><tr class="tot"><td>Total liabilities &amp; equity</td><td class="num">'+money(d.liab+d.equity+d.net)+'</td></tr></table>';
+   printHTML(c.name+" — Reports",html);}}
+function exportTB(c,fmt){const bal=ledger(c);const codes=Object.keys(bal).filter(code=>bal[code]!==0&&ACCOUNTS[code]).sort();let td=0,tc=0;const lines=codes.map(code=>{const v=bal[code],dr=v>0?v:0,cr=v<0?-v:0;td+=dr;tc+=cr;return [code,ACCOUNTS[code].name,dr,cr];});
+ if(fmt==="csv"){const r=[["Trial Balance — "+c.name],["As at",reportEnd(c)],[],["Code","Account","Debit","Credit"],...lines.map(l=>[l[0],l[1],(l[2]/100).toFixed(2),(l[3]/100).toFixed(2)]),["","Totals",(td/100).toFixed(2),(tc/100).toFixed(2)]];downloadCSV("TrialBalance_"+slug(c.name)+".csv",r);}
+ else{const html='<h1>Trial Balance</h1><div class="muted">'+c.name+' · as at '+reportEnd(c)+'</div><table><tr><th>Code</th><th>Account</th><th class="num">Debit</th><th class="num">Credit</th></tr>'+lines.map(l=>'<tr><td>'+l[0]+'</td><td>'+l[1]+'</td><td class="num">'+(l[2]?money(l[2]):'')+'</td><td class="num">'+(l[3]?money(l[3]):'')+'</td></tr>').join('')+'<tr class="tot"><td colspan=2>Totals</td><td class="num">'+money(td)+'</td><td class="num">'+money(tc)+'</td></tr></table>';printHTML(c.name+" — Trial Balance",html);}}
 function viewReports(c){
  const bal=ledger(c);
  let income=0,expense=0,assets=0,liab=0,equity=0;
@@ -539,7 +565,8 @@ function viewReports(c){
    <tr><td colspan=2><h3 class="sec" style="margin:8px 0 2px">Expenses</h3></td></tr>
    ${plLines.filter(l=>l[2]==="expense").map(l=>`<tr><td>${l[0]}</td><td class="num">${money(l[1])}</td></tr>`).join("")||'<tr><td class="mini">None</td><td></td></tr>'}
    <tr class="totrow"><td>Net profit</td><td class="num">${money(net)}</td></tr>`:`<tr><td class="mini">No posted transactions yet.</td><td></td></tr>`;
- return `<div class="card" style="margin-bottom:16px"><div class="row" style="justify-content:space-between;align-items:center"><div><h2 style="margin:0">Financial summary — ${c.name}</h2></div><div class="mini" style="text-align:right">Period covered<br><b style="font-size:14px;color:var(--navy)">${periodText}</b> · ${nMonths} month(s)</div></div></div>
+ return `<div class="card" style="margin-bottom:16px"><div class="row" style="justify-content:space-between;align-items:center"><div><h2 style="margin:0">Financial summary — ${c.name}</h2></div><div class="mini" style="text-align:right">Period covered<br><b style="font-size:14px;color:var(--navy)">${periodText}</b> · ${nMonths} month(s)</div></div>
+   <div class="row" style="margin-top:12px"><button class="btn sec" id="expRepPdf">Print / Save PDF</button> <button class="btn sec" id="expRepCsv">Download Excel/CSV</button></div></div>
   <div class="kpis">
    <div class="kpi"><div class="l">Total income</div><div class="v">${money(income)}</div></div>
    <div class="kpi"><div class="l">Total expenses</div><div class="v">${money(expense)}</div></div>
@@ -598,6 +625,7 @@ function viewTrialBalance(c){
    <tr class="totrow"><td colspan=2>Balance</td><td class="num">${b>0?money(b):''}</td><td class="num">${b<0?money(-b):''}</td></tr></tbody></table></div>`;
  }
  return `<div class="card"><h2>Trial Balance — ${c.name}</h2><div class="desc">Every account's net balance from posted entries. Debits must equal credits. Click a row to drill into its transactions.</div>
+  <div class="row" style="margin-bottom:12px"><button class="btn sec" id="expTbPdf">Print / Save PDF</button> <button class="btn sec" id="expTbCsv">Download Excel/CSV</button></div>
   <table><thead><tr><th>Code</th><th>Account</th><th class="num">Debit</th><th class="num">Credit</th></tr></thead><tbody>${rows}
   <tr class="totrow"><td colspan=2>Totals</td><td class="num">${money(td)}</td><td class="num">${money(tc)}</td></tr></tbody></table>
   <div class="banner ${td===tc?'ok':'err'}" style="margin-top:10px">${td===tc?'&#10003; In balance — debits equal credits':'&#9888; Out of balance by '+money(Math.abs(td-tc))}</div></div>
@@ -782,6 +810,11 @@ function bindView(){
  document.querySelectorAll("[data-tb]").forEach(r=>r.onclick=()=>{tbAccount=r.dataset.tb;render();});
  const tbc=document.getElementById("tbClose");
  if(tbc)tbc.onclick=()=>{tbAccount=null;render();};
+ // report exports
+ const erp=document.getElementById("expRepPdf");if(erp)erp.onclick=()=>exportReports(c,"pdf");
+ const erc=document.getElementById("expRepCsv");if(erc)erc.onclick=()=>exportReports(c,"csv");
+ const etp=document.getElementById("expTbPdf");if(etp)etp.onclick=()=>exportTB(c,"pdf");
+ const etc=document.getElementById("expTbCsv");if(etc)etc.onclick=()=>exportTB(c,"csv");
  // manual journals
  const dj=draft();
  function syncJH(){const dd=document.getElementById("jDate"),dm=document.getElementById("jMemo");if(dd)dj.date=dd.value;if(dm)dj.memo=dm.value;}
