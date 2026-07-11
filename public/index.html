@@ -295,7 +295,32 @@ function viewUpload(c){
   </div>
   <div id="uResult" style="margin-top:14px"></div>
  </div>
+ ${monthsChecklist(c)}
  ${statementsList(c)}`;
+}
+function periodMonths(c){
+ if(!c.periodStart||!c.periodEnd)return [];
+ const out=[];let [y,m]=c.periodStart.split("-").map(Number);const [ey,em]=c.periodEnd.split("-").map(Number);
+ let guard=0;
+ while((y<ey||(y===ey&&m<=em))&&guard<120){out.push(y+"-"+String(m).padStart(2,"0"));m++;if(m>12){m=1;y++;}guard++;}
+ return out;
+}
+function monthsChecklist(c){
+ const months=periodMonths(c);
+ const setter=`<div class="row" style="align-items:flex-end;gap:10px">
+   <div class="field"><label>Accounts period start</label><input type="month" id="pStart" value="${c.periodStart||''}"></div>
+   <div class="field"><label>Period end (year-end month)</label><input type="month" id="pEnd" value="${c.periodEnd||''}"></div>
+   <button class="btn sec" id="savePeriod">Save period</button></div>`;
+ if(!months.length)return `<div class="card"><h2>Accounting period</h2><div class="desc">Set the client's accounting period to see exactly which months to upload.</div>${setter}</div>`;
+ const have={};(db.statements[c.id]||[]).forEach(s=>have[s.ym]=s);
+ const done=months.filter(m=>have[m]).length;
+ return `<div class="card"><h2>Statements needed — ${done}/${months.length} months uploaded</h2>
+  <div class="desc">One statement per month for the accounting period. Missing months are flagged.</div>${setter}
+  <table style="margin-top:12px"><thead><tr><th>Month</th><th>Status</th><th>Uploaded file</th></tr></thead><tbody>
+  ${months.map(m=>{const s=have[m];return `<tr><td>${monthName(m)}</td>
+   <td>${s?'<span class="pill green">Uploaded</span>':'<span class="pill" style="background:#fdeceb;color:#b23a32">Missing</span>'}</td>
+   <td class="mini">${s?s.filename:'—'}</td></tr>`;}).join("")}
+  </tbody></table></div>`;
 }
 function statementsList(c){
  const s=(db.statements[c.id]||[]);
@@ -481,6 +506,8 @@ function bindView(){
  if(smp)smp.onclick=()=>{document.getElementById("uCsv").value=SAMPLE;document.getElementById("uName").value="2026-06_Acme_Barclays.csv";document.getElementById("uOpen").value="1000.00";document.getElementById("uClose").value="1430.12";};
  const upd=document.getElementById("uPdf");
  if(upd)upd.onchange=()=>handlePdf(upd.files[0]);
+ const sp=document.getElementById("savePeriod");
+ if(sp)sp.onclick=()=>{c.periodStart=document.getElementById("pStart").value;c.periodEnd=document.getElementById("pEnd").value;save();render();};
  document.querySelectorAll("[data-delst]").forEach(b=>b.onclick=()=>{db.statements[c.id]=db.statements[c.id].filter(s=>s.id!==b.dataset.delst);save();render();});
 
  // review
