@@ -91,6 +91,7 @@ h3.sec{font-size:13px;color:var(--navy);margin:6px 0 8px;text-transform:uppercas
       <a data-v="review"><span class="ico">✅</span><span class="lbl">Review queue</span></a>
       <a data-v="reports"><span class="ico">📊</span><span class="lbl">Reports</span></a>
       <a data-v="tb"><span class="ico">⚖️</span><span class="lbl">Trial balance</span></a>
+      <a data-v="journals"><span class="ico">✍️</span><span class="lbl">Journals</span></a>
       <a data-v="mgmt"><span class="ico">📝</span><span class="lbl">Management accounts</span></a>
       <a data-v="chart"><span class="ico">📒</span><span class="lbl">Chart of accounts</span></a>
     </nav>
@@ -244,12 +245,15 @@ let pdfBank="";
 let reviewCat="all";
 let chartFilter="all";
 let tbAccount=null;
+let jrnlDraft=null;
+function draft(){if(!jrnlDraft)jrnlDraft={date:"",memo:"",lines:[{code:"",debit:"",credit:""},{code:"",debit:"",credit:""}]};return jrnlDraft;}
 const TITLES={clients:["Clients","Add the businesses whose books you keep."],
  opening:["Opening balances","Set the client's starting position. Debits must equal credits."],
  upload:["Upload statement","Import a bank statement, with safety checks before anything posts."],
  review:["Review queue","Check and correct how each transaction was categorised."],
  reports:["Reports","Live Profit & Loss, Balance Sheet and key figures."],
  tb:["Trial balance","Every account's balance, with drill-down to transactions."],
+ journals:["Journals","Manual adjustments — accruals, prepayments, depreciation, corrections."],
  mgmt:["Management accounts","Monthly variance analysis and auto-drafted commentary."],
  chart:["Chart of accounts","The nominal accounts used to categorise transactions."]};
 
@@ -320,6 +324,7 @@ function render(){
  if(view==="review")el.innerHTML=viewReview(c);
  if(view==="reports")el.innerHTML=viewReports(c);
  if(view==="tb")el.innerHTML=viewTrialBalance(c);
+ if(view==="journals")el.innerHTML=viewJournals(c);
  if(view==="mgmt")el.innerHTML=viewMgmt(c);
  bindView();
 }
@@ -491,6 +496,7 @@ function ledger(c){
  const entries=[];
  (db.opening[c.id]||[]).forEach(r=>{const v=toPence(r.debit)-toPence(r.credit);if(v!==0)entries.push({code:r.code,amountPence:v});});
  (db.statements[c.id]||[]).forEach(st=>{if(!st.reconciled)return;st.txns.forEach(t=>{buildJournal(t,t.code,c).forEach(e=>entries.push(e));});});
+ ((db.journals&&db.journals[c.id])||[]).forEach(j=>j.lines.forEach(e=>entries.push(e)));
  const bal={};entries.forEach(e=>bal[e.code]=(bal[e.code]||0)+e.amountPence);
  return bal;
 }
@@ -571,6 +577,7 @@ function accountEntries(c,code){
  const out=[];
  (db.opening[c.id]||[]).forEach(r=>{if(r.code===code){const v=toPence(r.debit)-toPence(r.credit);if(v)out.push({date:"Opening",desc:"Opening balance",amt:v});}});
  (db.statements[c.id]||[]).forEach(st=>{if(!st.reconciled)return;st.txns.forEach(t=>{buildJournal(t,t.code,c).forEach(e=>{if(e.code===code)out.push({date:t.date,desc:t.description,amt:e.amountPence});});});});
+ ((db.journals&&db.journals[c.id])||[]).forEach(j=>j.lines.forEach(e=>{if(e.code===code)out.push({date:j.date,desc:j.memo||"Journal",amt:e.amountPence});}));
  return out;
 }
 function viewTrialBalance(c){
@@ -592,6 +599,34 @@ function viewTrialBalance(c){
   <tr class="totrow"><td colspan=2>Totals</td><td class="num">${money(td)}</td><td class="num">${money(tc)}</td></tr></tbody></table>
   <div class="banner ${td===tc?'ok':'err'}" style="margin-top:10px">${td===tc?'&#10003; In balance — debits equal credits':'&#9888; Out of balance by '+money(Math.abs(td-tc))}</div></div>
   ${drill}`;
+}
+
+/* ============ MANUAL JOURNALS ============ */
+function clientJournals(c){return (db.journals&&db.journals[c.id])||[];}
+function viewJournals(c){
+ const js=clientJournals(c);
+ const list=js.length?`<div class="card"><h2>Posted journals</h2><table><thead><tr><th>Date</th><th>Memo</th><th>Lines</th><th class="num">Value</th><th></th></tr></thead><tbody>
+  ${js.slice().reverse().map(j=>{const val=j.lines.reduce((a,l)=>a+(l.amountPence>0?l.amountPence:0),0);
+   return `<tr><td class="mini">${j.date}</td><td>${j.memo||''}</td><td class="mini">${j.lines.map(l=>(ACCOUNTS[l.code]?ACCOUNTS[l.code].name:l.code)+" "+(l.amountPence>0?"Dr ":"Cr ")+money(Math.abs(l.amountPence))).join("; ")}</td><td class="num">${money(val)}</td><td class="num"><button class="btn sm ghost" data-deljrnl="${j.id}">Delete</button></td></tr>`;}).join("")}
+  </tbody></table></div>`:'';
+ const dr=draft();
+ const td=dr.lines.reduce((a,l)=>a+toPence(l.debit),0),tc=dr.lines.reduce((a,l)=>a+toPence(l.credit),0);
+ const bal=td===tc,nonzero=td>0;
+ const lineRows=dr.lines.map((l,i)=>`<tr>
+   <td><select data-jc="${i}"><option value="">— account —</option>${Object.keys(ACCOUNTS).sort().map(code=>`<option value="${code}" ${code===l.code?"selected":""}>${code} · ${ACCOUNTS[code].name}</option>`).join("")}</select></td>
+   <td class="num"><input class="num" style="width:110px" data-jd="${i}" value="${l.debit||''}" placeholder="0.00"></td>
+   <td class="num"><input class="num" style="width:110px" data-jcr="${i}" value="${l.credit||''}" placeholder="0.00"></td>
+   <td class="num"><button class="btn sm ghost" data-jrm="${i}">&#10005;</button></td></tr>`).join("");
+ return `${list}
+  <div class="card"><h2>New journal</h2><div class="desc">For accruals, prepayments, depreciation and corrections. Debits must equal credits.</div>
+   <div class="row"><div class="field"><label>Date</label><input type="date" id="jDate" value="${dr.date||''}"></div>
+    <div class="field grow"><label>Memo / narrative</label><input id="jMemo" value="${(dr.memo||'').replace(/"/g,'&quot;')}" placeholder="e.g. October depreciation"></div></div>
+   <table style="margin-top:12px"><thead><tr><th>Account</th><th class="num">Debit (£)</th><th class="num">Credit (£)</th><th></th></tr></thead>
+    <tbody>${lineRows}</tbody>
+    <tfoot><tr class="totrow"><td>Totals</td><td class="num">${money(td)}</td><td class="num">${money(tc)}</td><td></td></tr></tfoot></table>
+   <div class="row" style="margin-top:12px;align-items:center"><button class="btn sec" id="jAddLine">+ Add line</button>
+    <div class="banner ${bal&&nonzero?'ok':'err'}" style="margin:0;flex:1">${!nonzero?'Enter debit/credit amounts':bal?'&#10003; Balanced — ready to post':'Not balanced — difference '+money(Math.abs(td-tc))}</div>
+    <button class="btn" id="jPost"${bal&&nonzero?'':' disabled style="opacity:.5"'}>Post journal</button></div></div>`;
 }
 
 /* ============ MANAGEMENT ACCOUNTS ============ */
@@ -709,6 +744,22 @@ function bindView(){
  document.querySelectorAll("[data-tb]").forEach(r=>r.onclick=()=>{tbAccount=r.dataset.tb;render();});
  const tbc=document.getElementById("tbClose");
  if(tbc)tbc.onclick=()=>{tbAccount=null;render();};
+ // manual journals
+ const dj=draft();
+ function syncJH(){const dd=document.getElementById("jDate"),dm=document.getElementById("jMemo");if(dd)dj.date=dd.value;if(dm)dj.memo=dm.value;}
+ document.querySelectorAll("[data-jc]").forEach(s=>s.onchange=()=>{syncJH();dj.lines[s.dataset.jc].code=s.value;render();});
+ document.querySelectorAll("[data-jd]").forEach(i=>i.onchange=()=>{syncJH();dj.lines[i.dataset.jd].debit=i.value;render();});
+ document.querySelectorAll("[data-jcr]").forEach(i=>i.onchange=()=>{syncJH();dj.lines[i.dataset.jcr].credit=i.value;render();});
+ document.querySelectorAll("[data-jrm]").forEach(b=>b.onclick=()=>{syncJH();dj.lines.splice(b.dataset.jrm,1);if(!dj.lines.length)dj.lines.push({code:"",debit:"",credit:""});render();});
+ const jal=document.getElementById("jAddLine");if(jal)jal.onclick=()=>{syncJH();dj.lines.push({code:"",debit:"",credit:""});render();};
+ const jp=document.getElementById("jPost");if(jp)jp.onclick=()=>{syncJH();
+  const lines=dj.lines.filter(l=>l.code&&(toPence(l.debit)||toPence(l.credit))).map(l=>({code:l.code,amountPence:toPence(l.debit)-toPence(l.credit)}));
+  const net=lines.reduce((a,l)=>a+l.amountPence,0);
+  if(lines.length<2||net!==0)return alert("A journal needs at least two lines and must balance to zero.");
+  db.journals=db.journals||{};db.journals[c.id]=db.journals[c.id]||[];
+  db.journals[c.id].push({id:uid(),date:dj.date||new Date().toISOString().slice(0,10),memo:dj.memo||"",lines});
+  jrnlDraft=null;save();render();};
+ document.querySelectorAll("[data-deljrnl]").forEach(b=>b.onclick=()=>{if(db.journals&&db.journals[c.id]){db.journals[c.id]=db.journals[c.id].filter(j=>j.id!==b.dataset.deljrnl);save();render();}});
 
  // management accounts
  const mp=document.getElementById("mgmtPick");
