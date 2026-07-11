@@ -276,22 +276,22 @@ const SAMPLE=`Date,Description,Amount,Balance
 2026-06-28,TRAINLINE TRAVEL,-49.44,1430.12`;
 function viewUpload(c){
  return `<div class="card"><h2>Import a bank statement</h2>
-  <div class="desc">Paste a CSV (or click “Load sample”). We check the filename and that the statement adds up <b>before</b> posting anything.</div>
+  <div class="desc">Choose your bank PDF (Lloyds supported) — it reads the month, balances and rows for you. Or paste CSV. Nothing posts until the statement reconciles.</div>
   <div class="row">
-   <div class="field"><label>File name (YYYY-MM_Company_Bank.csv)</label><input id="uName" value="2026-06_Acme_Barclays.csv" style="width:280px"></div>
-   <div class="field"><label>Opening balance (£)</label><input id="uOpen" value="1000.00" style="width:130px"></div>
-   <div class="field"><label>Closing balance (£)</label><input id="uClose" value="1430.12" style="width:130px"></div>
-  </div>
-  <div class="row" style="margin-top:12px">
-   <div class="field grow"><label>Import a PDF statement (beta) — set the opening balance above first, then choose the file. It extracts the rows for you to review.</label>
+   <div class="field grow"><label>1. Choose a PDF statement — it auto-fills the month, opening/closing and rows below</label>
     <input type="file" id="uPdf" accept="application/pdf"></div>
   </div>
-  <div id="pdfNote" class="mini" style="margin-top:4px"></div>
-  <div class="field" style="margin-top:12px"><label>Statement rows (CSV) — check these before importing</label>
-   <textarea id="uCsv" rows="9" style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px">${SAMPLE}</textarea></div>
+  <div id="pdfNote" class="mini" style="margin-top:6px"></div>
+  <div class="row" style="margin-top:12px">
+   <div class="field"><label>File name (YYYY-MM_Company_Bank)</label><input id="uName" value="" placeholder="2026-06_Acme_Barclays.pdf" style="width:280px"></div>
+   <div class="field"><label>Opening balance (£)</label><input id="uOpen" value="" placeholder="0.00" style="width:130px"></div>
+   <div class="field"><label>Closing balance (£)</label><input id="uClose" value="" placeholder="0.00" style="width:130px"></div>
+  </div>
+  <div class="field" style="margin-top:12px"><label>Statement rows (CSV) — filled from your PDF, or paste your own. Check before importing.</label>
+   <textarea id="uCsv" rows="9" placeholder="Date,Description,Amount,Balance" style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px"></textarea></div>
   <div class="row" style="margin-top:12px">
    <button class="btn" id="uImport">Check &amp; import</button>
-   <button class="btn sec" id="uSample">Load sample</button>
+   <button class="btn sec" id="uSample">Load demo sample</button>
   </div>
   <div id="uResult" style="margin-top:14px"></div>
  </div>
@@ -314,13 +314,16 @@ function monthsChecklist(c){
  if(!months.length)return `<div class="card"><h2>Accounting period</h2><div class="desc">Set the client's accounting period to see exactly which months to upload.</div>${setter}</div>`;
  const have={};(db.statements[c.id]||[]).forEach(s=>have[s.ym]=s);
  const done=months.filter(m=>have[m]).length;
- return `<div class="card"><h2>Statements needed — ${done}/${months.length} months uploaded</h2>
-  <div class="desc">One statement per month for the accounting period. Missing months are flagged.</div>${setter}
-  <table style="margin-top:12px"><thead><tr><th>Month</th><th>Status</th><th>Uploaded file</th></tr></thead><tbody>
-  ${months.map(m=>{const s=have[m];return `<tr><td>${monthName(m)}</td>
+ let prevClose=null;
+ const body=months.map(m=>{const s=have[m];let cont='<span class="mini">—</span>';
+  if(s){if(prevClose!=null){cont=s.openingPence===prevClose?'<span class="pill green">OK</span>':`<span class="pill" style="background:#fbf1e4;color:#9a6a15">off ${money(s.openingPence-prevClose)}</span>`;}else cont='<span class="mini">first</span>';prevClose=s.closingPence;}
+  return `<tr><td>${monthName(m)}</td>
    <td>${s?'<span class="pill green">Uploaded</span>':'<span class="pill" style="background:#fdeceb;color:#b23a32">Missing</span>'}</td>
-   <td class="mini">${s?s.filename:'—'}</td></tr>`;}).join("")}
-  </tbody></table></div>`;
+   <td class="num">${s?money(s.openingPence):'—'}</td><td class="num">${s?money(s.closingPence):'—'}</td>
+   <td>${cont}</td></tr>`;}).join("");
+ return `<div class="card"><h2>Statements — ${done}/${months.length} months uploaded</h2>
+  <div class="desc">Opening &amp; closing are read from each statement by its month. Continuity checks each month opens where the previous closed.</div>${setter}
+  <table style="margin-top:12px"><thead><tr><th>Month</th><th>Status</th><th class="num">Opening</th><th class="num">Closing</th><th>Continuity</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 function statementsList(c){
  const s=(db.statements[c.id]||[]);
