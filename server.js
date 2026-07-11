@@ -145,6 +145,10 @@ function parseLloyds(text) {
     .map(m => Math.round(parseFloat(m[1].replace(/,/g, "")) * 100));
   const opening = bals.length ? bals[0] : 0;
   const closing = bals.length > 1 ? bals[1] : null;
+  const MN = { January:1,February:2,March:3,April:4,May:5,June:6,July:7,August:8,September:9,October:10,November:11,December:12 };
+  const dm = [...text.matchAll(/Balance on \d{2} ([A-Za-z]+) (\d{4})/g)];
+  let ym = null;
+  if (dm.length) { const last = dm[dm.length - 1]; const mo = MN[last[1]]; if (mo) ym = last[2] + "-" + String(mo).padStart(2, "0"); }
   const dateRe = /^(\d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{2})\b/;
   const numRe = /-?\d{1,3}(?:,\d{3})*\.\d{2}/g;
   let pendingDesc = "", prev = opening; const rows = [];
@@ -161,7 +165,7 @@ function parseLloyds(text) {
       }
     }
   }
-  return { opening: opening / 100, closing: closing == null ? null : closing / 100, computed: prev / 100, count: rows.length, rows };
+  return { opening: opening / 100, closing: closing == null ? null : closing / 100, ym, computed: prev / 100, count: rows.length, rows };
 }
 
 // --- server ---
