@@ -209,7 +209,7 @@ function clientPick(){
 function render(){
  clientPick();
  const el=document.getElementById("view");
- if(view==="clients")return el.innerHTML=viewClients();
+ if(view==="clients"){el.innerHTML=viewClients();bindView();return;}
  const c=activeClient();
  if(!c){el.innerHTML=`<div class="card"><div class="empty">Add a client first, then choose them as the active client at the top right.</div></div>`;return;}
  if(view==="opening")el.innerHTML=viewOpening(c);
