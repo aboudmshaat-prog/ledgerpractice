@@ -93,6 +93,7 @@ h3.sec{font-size:13px;color:var(--navy);margin:6px 0 8px;text-transform:uppercas
       <a data-v="tb"><span class="ico">⚖️</span><span class="lbl">Trial balance</span></a>
       <a data-v="journals"><span class="ico">✍️</span><span class="lbl">Journals</span></a>
       <a data-v="budget"><span class="ico">🎯</span><span class="lbl">Budget &amp; forecast</span></a>
+      <a data-v="invoices"><span class="ico">🧾</span><span class="lbl">Invoices &amp; bills</span></a>
       <a data-v="mgmt"><span class="ico">📝</span><span class="lbl">Management accounts</span></a>
       <a data-v="chart"><span class="ico">📒</span><span class="lbl">Chart of accounts</span></a>
     </nav>
@@ -256,6 +257,7 @@ const TITLES={clients:["Clients","Add the businesses whose books you keep."],
  tb:["Trial balance","Every account's balance, with drill-down to transactions."],
  journals:["Journals","Manual adjustments — accruals, prepayments, depreciation, corrections."],
  budget:["Budget & forecast","Budget vs actual and a cash-flow projection."],
+ invoices:["Invoices & bills","Track who owes you and who you owe, with aged summaries."],
  mgmt:["Management accounts","Monthly variance analysis and auto-drafted commentary."],
  chart:["Chart of accounts","The nominal accounts used to categorise transactions."]};
 
@@ -328,6 +330,7 @@ function render(){
  if(view==="tb")el.innerHTML=viewTrialBalance(c);
  if(view==="journals")el.innerHTML=viewJournals(c);
  if(view==="budget")el.innerHTML=viewBudget(c);
+ if(view==="invoices")el.innerHTML=viewInvoices(c);
  if(view==="mgmt")el.innerHTML=viewMgmt(c);
  bindView();
 }
@@ -632,6 +635,43 @@ function viewTrialBalance(c){
   ${drill}`;
 }
 
+/* ============ INVOICES & BILLS (AR/AP) ============ */
+function invList(c,key){return (db[key]&&db[key][c.id])||[];}
+function daysBetween(a,b){if(!a)return 0;return Math.round((new Date(b)-new Date(a))/86400000);}
+function agedSummary(items){const today=new Date().toISOString().slice(0,10);const bk={current:0,d30:0,d60:0,d90:0,d90p:0};let total=0;
+ items.filter(i=>!i.paid).forEach(i=>{const days=daysBetween(i.due||i.date,today);total+=i.amountPence;
+  if(days<=0)bk.current+=i.amountPence;else if(days<=30)bk.d30+=i.amountPence;else if(days<=60)bk.d60+=i.amountPence;else if(days<=90)bk.d90+=i.amountPence;else bk.d90p+=i.amountPence;});
+ return {bk,total};}
+function invSection(c,key,title,party,addLabel){
+ const items=invList(c,key).slice().sort((a,b)=>((a.due||a.date)<(b.due||b.date))?-1:1);
+ const ag=agedSummary(items),today=new Date().toISOString().slice(0,10);
+ const rows=items.map(i=>{const overdue=!i.paid&&daysBetween(i.due||i.date,today)>0;
+   return `<tr><td class="mini">${i.date}</td><td class="mini">${i.due||'—'}</td><td>${i.party||''}</td><td class="mini">${i.desc||''}</td><td class="num">${money(i.amountPence)}</td>
+    <td>${i.paid?'<span class="pill green">Paid</span>':(overdue?'<span class="pill" style="background:#fdeceb;color:#b23a32">Overdue</span>':'<span class="pill" style="background:#fbf1e4;color:#9a6a15">Open</span>')}</td>
+    <td class="num" style="white-space:nowrap">${i.paid?`<button class="btn sm ghost" data-unpayinv="${key}:${i.id}">Un-pay</button>`:`<button class="btn sm sec" data-payinv="${key}:${i.id}">Mark paid</button>`} <button class="btn sm ghost" data-delinv="${key}:${i.id}">&#10005;</button></td></tr>`;}).join("")||`<tr><td colspan=7 class="mini">Nothing recorded yet.</td></tr>`;
+ return `<div class="card"><h2>${title}</h2>
+   <div class="kpis" style="margin-bottom:14px">
+    <div class="kpi"><div class="l">Total outstanding</div><div class="v">${money(ag.total)}</div></div>
+    <div class="kpi"><div class="l">Not yet due</div><div class="v">${money(ag.bk.current)}</div></div>
+    <div class="kpi"><div class="l">1–60 days</div><div class="v">${money(ag.bk.d30+ag.bk.d60)}</div></div>
+    <div class="kpi"><div class="l">60+ days</div><div class="v" style="color:${(ag.bk.d90+ag.bk.d90p)?'#b23a32':''}">${money(ag.bk.d90+ag.bk.d90p)}</div></div>
+   </div>
+   <table><thead><tr><th>Date</th><th>Due</th><th>${party}</th><th>Description</th><th class="num">Amount</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+   <div class="row" style="margin-top:14px;align-items:flex-end">
+    <div class="field"><label>Date</label><input type="date" data-add="${key}:date" style="width:150px"></div>
+    <div class="field"><label>Due date</label><input type="date" data-add="${key}:due" style="width:150px"></div>
+    <div class="field grow"><label>${party}</label><input data-add="${key}:party" placeholder="${party}"></div>
+    <div class="field"><label>Amount (£)</label><input data-add="${key}:amount" style="width:110px" placeholder="0.00"></div>
+    <button class="btn" data-addinv="${key}">${addLabel}</button></div>
+   <div class="row" style="margin-top:8px"><div class="field grow"><label>Description (optional)</label><input data-add="${key}:desc" placeholder="Invoice ref / notes"></div></div>
+  </div>`;
+}
+function viewInvoices(c){
+ return `<div class="card"><div class="mini">This tracks amounts owed to and by ${c.name} (aged debtors &amp; creditors). It's a tracking ledger — your P&amp;L stays based on the reconciled bank statements, so nothing is double-counted. Mark items paid as they settle.</div></div>`
+  +invSection(c,"ar","Sales invoices — money owed to you","Customer","Add invoice")
+  +invSection(c,"ap","Purchase bills — money you owe","Supplier","Add bill");
+}
+
 /* ============ BUDGET & FORECAST ============ */
 function viewBudget(c){
  const bal=ledger(c);
@@ -833,6 +873,16 @@ function bindView(){
  document.querySelectorAll("[data-deljrnl]").forEach(b=>b.onclick=()=>{if(db.journals&&db.journals[c.id]){db.journals[c.id]=db.journals[c.id].filter(j=>j.id!==b.dataset.deljrnl);save();render();}});
  // budget
  document.querySelectorAll("[data-bud]").forEach(i=>i.onchange=()=>{db.budget=db.budget||{};db.budget[c.id]=db.budget[c.id]||{};db.budget[c.id][i.dataset.bud]=i.value;save();render();});
+ // invoices & bills
+ document.querySelectorAll("[data-addinv]").forEach(b=>b.onclick=()=>{const key=b.dataset.addinv;
+  const g=f=>{const el=document.querySelector('[data-add="'+key+':'+f+'"]');return el?el.value:"";};
+  const amt=toPence(g("amount"));if(!amt)return alert("Enter an amount.");
+  db[key]=db[key]||{};db[key][c.id]=db[key][c.id]||[];
+  db[key][c.id].push({id:uid(),date:g("date")||new Date().toISOString().slice(0,10),due:g("due"),party:g("party"),amountPence:amt,desc:g("desc"),paid:false});
+  save();render();});
+ document.querySelectorAll("[data-payinv]").forEach(b=>b.onclick=()=>{const [key,id]=b.dataset.payinv.split(":");const it=(db[key][c.id]||[]).find(x=>x.id===id);if(it){it.paid=true;it.paidDate=new Date().toISOString().slice(0,10);}save();render();});
+ document.querySelectorAll("[data-unpayinv]").forEach(b=>b.onclick=()=>{const [key,id]=b.dataset.unpayinv.split(":");const it=(db[key][c.id]||[]).find(x=>x.id===id);if(it){it.paid=false;delete it.paidDate;}save();render();});
+ document.querySelectorAll("[data-delinv]").forEach(b=>b.onclick=()=>{const [key,id]=b.dataset.delinv.split(":");db[key][c.id]=(db[key][c.id]||[]).filter(x=>x.id!==id);save();render();});
 
  // management accounts
  const mp=document.getElementById("mgmtPick");
