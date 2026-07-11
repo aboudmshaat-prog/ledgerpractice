@@ -491,25 +491,53 @@ function viewReports(c){
    else if(a.type==="equity"){equity+=-v;}else{liab+=-v;bsLiab.push([a.name,-v]);}}
  }
  const net=income-expense;
- const grossMargin=income?Math.round(net/income*1000)/10:0;
+ const margin=income?Math.round(net/income*1000)/10:0;
+ const expRatio=income?Math.round(expense/income*1000)/10:0;
  const currentRatio=liab!==0?Math.round(Math.abs(assets/liab)*100)/100:"—";
  const taxReserve=net>0?Math.round(net*0.19):0; // illustrative 19%
+ const cashAtBank=bal["1200"]||0;
+ const sts=(db.statements[c.id]||[]).filter(s=>s.reconciled).slice().sort((a,b)=>a.ym<b.ym?-1:1);
+ const nMonths=sts.length;
+ const periodText=nMonths?monthName(sts[0].ym)+" to "+monthName(sts[nMonths-1].ym):"no reconciled statements yet";
+ const asAt=nMonths?monthName(sts[nMonths-1].ym):"—";
+ const avgProfit=nMonths?Math.round(net/nMonths):0;
+ // Monthly net-profit chart
+ const monthly=sts.map(st=>({ym:st.ym,net:monthlyFigures(c,st).net}));
+ const maxNet=Math.max(1,...monthly.map(m=>Math.abs(m.net)));
+ const trend=monthly.map(m=>{const w=Math.round(Math.abs(m.net)/maxNet*100),pos=m.net>=0;
+   return `<div style="display:flex;align-items:center;gap:8px;margin:5px 0"><div class="mini" style="width:92px;flex:none">${monthName(m.ym)}</div><div style="flex:1;background:#eef1f6;border-radius:6px;height:18px"><div style="height:100%;width:${w}%;background:${pos?'#2ea36b':'#e0554e'};border-radius:6px"></div></div><div class="num" style="width:92px;flex:none;color:${pos?'#1f7d51':'#b23a32'}">${money(m.net)}</div></div>`;}).join("")||'<div class="mini">Import statements to see the monthly trend.</div>';
+ // Expense concentration chart
+ const exp=plLines.filter(l=>l[2]==="expense").sort((a,b)=>b[1]-a[1]);
+ const maxExp=Math.max(1,...exp.map(e=>e[1]));
+ const conc=exp.slice(0,8).map(e=>{const w=Math.round(e[1]/maxExp*100),pct=expense?Math.round(e[1]/expense*100):0;
+   return `<div style="display:flex;align-items:center;gap:8px;margin:5px 0"><div class="mini" style="width:140px;flex:none">${e[0]}</div><div style="flex:1;background:#eef1f6;border-radius:6px;height:18px"><div style="height:100%;width:${w}%;background:#2E75B6;border-radius:6px"></div></div><div class="num" style="width:120px;flex:none">${money(e[1])} <span class="mini">${pct}%</span></div></div>`;}).join("")||'<div class="mini">No expenses yet.</div>';
  const plBody=plLines.length?`
    <tr><td colspan=2><h3 class="sec" style="margin:2px 0">Income</h3></td></tr>
    ${plLines.filter(l=>l[2]==="income").map(l=>`<tr><td>${l[0]}</td><td class="num">${money(l[1])}</td></tr>`).join("")||'<tr><td class="mini">None</td><td></td></tr>'}
    <tr><td colspan=2><h3 class="sec" style="margin:8px 0 2px">Expenses</h3></td></tr>
    ${plLines.filter(l=>l[2]==="expense").map(l=>`<tr><td>${l[0]}</td><td class="num">${money(l[1])}</td></tr>`).join("")||'<tr><td class="mini">None</td><td></td></tr>'}
    <tr class="totrow"><td>Net profit</td><td class="num">${money(net)}</td></tr>`:`<tr><td class="mini">No posted transactions yet.</td><td></td></tr>`;
- return `<div class="kpis">
+ return `<div class="card" style="margin-bottom:16px"><div class="row" style="justify-content:space-between;align-items:center"><div><h2 style="margin:0">Financial summary — ${c.name}</h2></div><div class="mini" style="text-align:right">Period covered<br><b style="font-size:14px;color:var(--navy)">${periodText}</b> · ${nMonths} month(s)</div></div></div>
+  <div class="kpis">
+   <div class="kpi"><div class="l">Total income</div><div class="v">${money(income)}</div></div>
+   <div class="kpi"><div class="l">Total expenses</div><div class="v">${money(expense)}</div></div>
    <div class="kpi"><div class="l">Net profit</div><div class="v">${money(net)}</div></div>
-   <div class="kpi"><div class="l">Net margin</div><div class="v">${grossMargin}%</div></div>
-   <div class="kpi"><div class="l">Current ratio (liquidity)</div><div class="v">${currentRatio}</div></div>
+   <div class="kpi"><div class="l">Net margin</div><div class="v">${margin}%</div></div>
+  </div>
+  <div class="kpis">
+   <div class="kpi"><div class="l">Cash at bank</div><div class="v">${money(cashAtBank)}</div></div>
+   <div class="kpi"><div class="l">Current ratio</div><div class="v">${currentRatio}</div></div>
+   <div class="kpi"><div class="l">Avg monthly profit</div><div class="v">${money(avgProfit)}</div></div>
    <div class="kpi"><div class="l">Tax reserve (est. 19%)</div><div class="v">${money(taxReserve)}</div></div>
   </div>
   <div class="split">
-   <div class="card"><h2>Profit &amp; Loss</h2><div class="desc">From reconciled transactions only.</div>
+   <div class="card"><h2>Monthly net profit</h2><div class="desc">${periodText}</div>${trend}</div>
+   <div class="card"><h2>Expense concentration</h2><div class="desc">Top costs as a share of total expenses (${money(expense)})</div>${conc}</div>
+  </div>
+  <div class="split">
+   <div class="card"><h2>Profit &amp; Loss</h2><div class="desc">Period: ${periodText}</div>
     <table><tbody>${plBody}</tbody></table></div>
-   <div class="card"><h2>Balance Sheet</h2><div class="desc">Assets, liabilities and equity.</div>
+   <div class="card"><h2>Balance Sheet</h2><div class="desc">As at ${asAt}</div>
     <table><tbody>
      <tr><td colspan=2><h3 class="sec" style="margin:2px 0">Assets</h3></td></tr>
      ${bsAssets.map(l=>`<tr><td>${l[0]}</td><td class="num">${money(l[1])}</td></tr>`).join("")||'<tr><td class="mini">None</td><td></td></tr>'}
